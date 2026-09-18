@@ -9,18 +9,19 @@
     Unattended - Start-Process without -Wait, no prompts.
 
 .PARAMETER Store
-    Steam (default) launches through steam.exe. GamePass launches the Xbox /
-    Game Pass package by its app id.
+    Steam (default) launches through steam.exe. GOG runs CPPFPS.exe from the
+    folder GOG's registry entry names. GamePass launches the Xbox / Game Pass
+    package by its app id.
 
 .PARAMETER Windowed
-    Steam only: launch windowed at -ResX by -ResY instead of the saved display
+    Steam and GOG: launch windowed at -ResX by -ResY instead of the saved display
     mode. The Game Pass build takes its command line from the package's
     UE4CommandLine.txt instead.
 #>
 
 [CmdletBinding()]
 param(
-    [ValidateSet('Steam', 'GamePass')][string]$Store = 'Steam',
+    [ValidateSet('Steam', 'GOG', 'GamePass')][string]$Store = 'Steam',
     [switch]$Windowed,
     [int]$ResX = 1920,
     [int]$ResY = 1080
@@ -39,14 +40,28 @@ if ($Store -eq 'GamePass') {
     exit 0
 }
 
+$gameArgs = @()
+if ($Windowed) { $gameArgs += @('-windowed', "-ResX=$ResX", "-ResY=$ResY") }
+
+if ($Store -eq 'GOG') {
+    $key = 'HKLM:\SOFTWARE\WOW6432Node\GOG.com\Games\1599916752'
+    if (-not (Test-Path $key)) {
+        Write-Host "ERROR: GOG Trepang2 is not installed ($key is missing)." -ForegroundColor Red
+        exit 1
+    }
+    $gogRoot = (Get-ItemProperty $key).path
+    Write-Host "Launching Trepang2 (GOG): $($gameArgs -join ' ')" -ForegroundColor Cyan
+    $gogArgs = @{ FilePath = (Join-Path $gogRoot 'CPPFPS.exe'); WorkingDirectory = $gogRoot }
+    if ($gameArgs) { $gogArgs.ArgumentList = $gameArgs }
+    Start-Process @gogArgs
+    exit 0
+}
+
 $steam = Join-Path ${env:ProgramFiles(x86)} 'Steam\steam.exe'
 if (-not (Test-Path $steam)) {
     Write-Host "ERROR: steam.exe not found at $steam." -ForegroundColor Red
     exit 1
 }
-
-$gameArgs = @()
-if ($Windowed) { $gameArgs += @('-windowed', "-ResX=$ResX", "-ResY=$ResY") }
 
 Write-Host "Launching Trepang2 via Steam: $($gameArgs -join ' ')" -ForegroundColor Cyan
 Start-Process -FilePath $steam -ArgumentList (@('-applaunch', '1164940') + $gameArgs)

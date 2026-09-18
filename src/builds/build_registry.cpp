@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstring>
+#include <filesystem>
 #include <string>
 
 #include <cameraunlock/memory/pe_fingerprint.h>
@@ -19,6 +20,7 @@ namespace t2_ht::builds
     // the top of kKnownProfiles) without removing the old one. Users on the
     // un-patched build still match their old profile by PE fingerprint.
     extern const BuildProfile kGdkProfile_20260318;
+    extern const BuildProfile kGogProfile_20240805;
     extern const BuildProfile kSteamProfile_20240730;
 
     namespace
@@ -29,8 +31,9 @@ namespace t2_ht::builds
         // mod is the one that is behind. Comparing a Steam exe with the Game
         // Pass build (or the other way round) would say nothing, which is why
         // the reference is chosen per store.
-        constexpr std::array<const BuildProfile*, 2> kKnownProfiles = {
+        constexpr std::array<const BuildProfile*, 3> kKnownProfiles = {
             &kGdkProfile_20260318,
+            &kGogProfile_20240805,
             &kSteamProfile_20240730,
         };
 
@@ -44,13 +47,19 @@ namespace t2_ht::builds
             return p && p->Offsets.kGetPlayerViewPointRva != 0;
         }
 
-        // Profile names start with their store: "steam-win64-..." or
-        // "gdk-wingdk-...". The exe name says which store is running: the Game
-        // Pass build ships CPPFPS-WinGDK-Shipping.exe, Steam CPPFPS-Win64-Shipping.exe.
+        // Profile names start with their store: "steam-win64-...",
+        // "gog-win64-..." or "gdk-wingdk-...". The Game Pass build ships
+        // CPPFPS-WinGDK-Shipping.exe; Steam and GOG both ship
+        // CPPFPS-Win64-Shipping.exe, and GOG's installer leaves
+        // goggame-1599916752.info in the game root, three folders above it.
         const char* RunningStorePrefix()
         {
             const std::wstring exe = cameraunlock::os::ModuleFilePath(nullptr);
-            return exe.find(L"WinGDK") != std::wstring::npos ? "gdk-" : "steam-";
+            if (exe.find(L"WinGDK") != std::wstring::npos) return "gdk-";
+            const std::filesystem::path root =
+                std::filesystem::path(exe).parent_path().parent_path().parent_path().parent_path();
+            const DWORD attrs = GetFileAttributesW((root / L"goggame-1599916752.info").c_str());
+            return attrs != INVALID_FILE_ATTRIBUTES ? "gog-" : "steam-";
         }
 
         const BuildProfile* NewestForStore(const char* prefix)

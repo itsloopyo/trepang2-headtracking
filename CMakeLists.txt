@@ -60,6 +60,7 @@ set(MOD_SOURCES
     src/builds/build_registry.cpp
     src/builds/steam_offsets.cpp
     src/builds/gdk_offsets.cpp
+    src/builds/gog_offsets.cpp
 )
 
 add_library(Trepang2HeadTracking SHARED ${MOD_SOURCES})
@@ -218,6 +219,7 @@ if(T2_BUILD_TESTS)
         src/builds/build_registry.cpp
         src/builds/steam_offsets.cpp
         src/builds/gdk_offsets.cpp
+        src/builds/gog_offsets.cpp
     )
     target_include_directories(t2_kismet_trace_tests PRIVATE
         src
@@ -254,6 +256,7 @@ if(T2_BUILD_TESTS)
         src/builds/build_registry.cpp
         src/builds/steam_offsets.cpp
         src/builds/gdk_offsets.cpp
+        src/builds/gog_offsets.cpp
     )
     target_include_directories(t2_object_table_tests PRIVATE
         src

@@ -12,17 +12,17 @@ An unofficial head tracking mod for Trepang2 that moves the view with your head 
 
 ## Requirements
 
-- [Trepang2](https://store.steampowered.com/app/1164940/Trepang2/) on Steam, or Trepang2 from the Xbox app / PC Game Pass.
+- [Trepang2](https://store.steampowered.com/app/1164940/Trepang2/) on Steam, Trepang2 on GOG, or Trepang2 from Xbox Game Pass.
 - A head tracking source that can send the OpenTrack UDP protocol: [OpenTrack](https://github.com/opentrack/opentrack) with a webcam or a VR headset, or a phone app that sends it directly.
 - Windows 10 or 11, 64-bit.
 
-The mod recognises the game builds it was made for by their executable: the Steam build (menu footer `BUILD#: 2484`, Jul 30 2024) and the Xbox / Game Pass package version 1.0.15.0. On a build it does not know, it writes a line to `HeadTracking.log` and stays dormant, and the game runs exactly as it ships.
+The mod recognises the game builds it was made for by their executable: the Steam build (menu footer `BUILD#: 2484`, Jul 30 2024), the GOG build of Aug 5 2024 and the Xbox Game Pass package version 1.0.15.0. On a build it does not know, it writes a line to `HeadTracking.log` and stays dormant, and the game runs exactly as it ships.
 
 ## Installation
 
 ### Lopari
 
-Once this mod is available in Lopari, download [Lopari](https://lopari.app), choose **Trepang2**, and click
+Download [Lopari](https://lopari.app), choose **Trepang2**, and click
 **Play with head tracking**.
 
 ### Standalone Installer
@@ -33,7 +33,7 @@ Once this mod is available in Lopari, download [Lopari](https://lopari.app), cho
 4. Configure OpenTrack to output UDP to `127.0.0.1:4242`.
 5. Launch the game.
 
-The installer sets up one copy per run. It checks `TREPANG2_PATH`, then Steam, then the Xbox app, and installs into the first copy it finds, so on a machine with both it takes the Steam one. Point it at a folder to install into that copy instead:
+The installer sets up one copy per run. It checks `TREPANG2_PATH`, then Steam, then GOG, then the Xbox app, and installs into the first copy it finds, so on a machine with more than one it takes the first in that order. Point it at a folder to install into that copy instead:
 
 ```powershell
 # Environment variable
@@ -44,14 +44,14 @@ $env:TREPANG2_PATH = "D:\SteamLibrary\steamapps\common\Trepang2"
 .\install.cmd "D:\SteamLibrary\steamapps\common\Trepang2"
 ```
 
-If you have the game on both stores, run it a second time with the other folder as the argument.
+If you have the game on more than one store, run it again for each other copy with its folder as the argument.
 
 ### Manual Installation
 
 The payload goes next to the game's shipping executable:
 
-- Steam: `CPPFPS\Binaries\Win64\` under the game folder, beside `CPPFPS-Win64-Shipping.exe`.
-- Xbox / Game Pass: `Content\CPPFPS\Binaries\WinGDK\` under the folder the Xbox app installed the game to, beside `CPPFPS-WinGDK-Shipping.exe`.
+- Steam and GOG: `CPPFPS\Binaries\Win64\` under the game folder, beside `CPPFPS-Win64-Shipping.exe`.
+- Xbox Game Pass: `Content\CPPFPS\Binaries\WinGDK\` under the folder the Xbox app installed the game to, beside `CPPFPS-WinGDK-Shipping.exe`.
 
 No mod manager deploys this mod: they place files into one fixed subtree per game, and this one has to land beside the exe, which is why there is a single installer ZIP and no Nexus page.
 
@@ -121,7 +121,7 @@ The choice is saved, so it survives a restart, and the mode you switched to is n
 
 ## Configuration
 
-`HeadTracking.ini` sits next to the game exe (`CPPFPS\Binaries\Win64\` on Steam, `Content\CPPFPS\Binaries\WinGDK\` on Game Pass) and is written with the defaults on first launch. Delete it to get the defaults back.
+`HeadTracking.ini` sits next to the game exe (`CPPFPS\Binaries\Win64\` on Steam and GOG, `Content\CPPFPS\Binaries\WinGDK\` on Xbox Game Pass) and is written with the defaults on first launch. Delete it to get the defaults back.
 
 ```ini
 [Network]
@@ -225,7 +225,7 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 
 **Known limitations:**
 
-- Only the Steam build and the Game Pass package version named under Requirements have been tested.
+- Only the Steam, GOG and Xbox Game Pass builds named under Requirements have been tested.
 - Trepang2 has no multiplayer mode, so the mod covers single player alone.
 
 ## Updating
