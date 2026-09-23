@@ -25,7 +25,6 @@
 #include <psapi.h>
 #include <intrin.h>
 
-#include "ads.h"
 #include "ads_gate.h"
 #include "ads_pose.h"
 #include "aim_projection.h"
@@ -38,7 +37,6 @@
 #include "inject_mode.h"
 #include "lean_trace.h"
 #include "logging.h"
-#include "marker_rule.h"
 #include "player_rig.h"
 #include "reticle.h"
 #include "torch_aim.h"
@@ -191,7 +189,7 @@ struct FrameReport {
     TrackingState State;
     game_state::Verdict Gate;
     bool HavePose = false;
-    AdsEntryPose::Pose Applied;
+    ads_pose::Pose Applied;
     float ZoomFactor = 1.0f;
     float RenderFov = 0.0f;
     float BaseFov = 0.0f;
@@ -206,7 +204,6 @@ struct FrameReport {
     // still published, pinned to the edge, so this is not "was the crosshair
     // moved" - it is the column that tells a pinned crosshair from a free one.
     bool MarkOnScreen = false;
-    bool MarkerShown = false;
 };
 
 std::atomic<bool> g_reportRequested{false};
@@ -227,13 +224,13 @@ void LogHeartbeat(const FrameReport& r, std::uintptr_t retRva) {
                   : udp_link::LinkStateName(udp_link::ClassifyLink(
                         receiver->IsRetrying(), receiver->IsRunning(), receiver->IsReceiving()));
     Log::Line("heartbeat ret=0x%08llx tracking=%s verdict=%s gate=%s viewOff=%.1fcm/%.1fdeg "
-              "aiming=%d adsMode=%s udp=%s pose=%d "
+              "aiming=%d udp=%s pose=%d "
               "applied=(Y%.2f P%.2f R%.2f x%.3f y%.3f z%.3f) fov=%.2f base=%.2f zoom=%.4f "
               "constraint=%d refAspect=%.3f tan=(%.4f,%.4f) lean=%s torch=%s",
               static_cast<unsigned long long>(retRva),
               g_trackingEnabled.load() ? "ON" : "OFF", Reason(r.State.verdict),
               game_state::BlockerName(r.Gate.Why), r.Gate.ViewOffsetCm, r.Gate.ViewAngleDeg,
-              r.State.aiming ? 1 : 0, AdsModeValue(GetAdsMode()),
+              r.State.aiming ? 1 : 0,
               udpPort, r.HavePose ? 1 : 0, r.Applied.yaw, r.Applied.pitch, r.Applied.roll,
               r.Applied.x, r.Applied.y, r.Applied.z, r.RenderFov, r.BaseFov, r.ZoomFactor,
               camera_fov::AspectConstraint(), camera_fov::ReferenceAspect(), r.TanX, r.TanY,
@@ -243,11 +240,10 @@ void LogHeartbeat(const FrameReport& r, std::uintptr_t retRva) {
                                                 : "clear",
               torch_aim::StateName());
     Log::Line("aim trace=%d hit=%d dist=%.1fcm point=(%.1f,%.1f,%.1f) "
-              "posOff=(%.2f,%.2f,%.2f) mark=%d ndc=(%.4f,%.4f) onScreen=%d adsMarker=%d",
+              "posOff=(%.2f,%.2f,%.2f) mark=%d ndc=(%.4f,%.4f) onScreen=%d",
               r.TraceValid ? 1 : 0, r.TraceHit ? 1 : 0, r.TraceDistance,
               r.AimPoint.X, r.AimPoint.Y, r.AimPoint.Z, r.PositionOffset.X, r.PositionOffset.Y,
-              r.PositionOffset.Z, r.Mark.Valid ? 1 : 0, r.Mark.X, r.Mark.Y, r.MarkOnScreen ? 1 : 0,
-              r.MarkerShown ? 1 : 0);
+              r.PositionOffset.Z, r.Mark.Valid ? 1 : 0, r.Mark.X, r.Mark.Y, r.MarkOnScreen ? 1 : 0);
 }
 
 void LogLeanClamp(const cameraunlock::math::Vec3& wanted,
@@ -377,7 +373,7 @@ void LogAimTrace(const aim_trace::Result& hit) {
 // then scales back what a narrowed field of view magnifies - all but roll, which
 // rotates the image rather than moving it across the frame and so is the same
 // tilt at every field of view.
-void ShapePose(AdsEntryPose::Pose& pose, float entry, float zoomFactor) {
+void ShapePose(ads_pose::Pose& pose, float entry, float zoomFactor) {
     pose.yaw *= entry;
     pose.pitch *= entry;
     pose.roll *= entry;
@@ -473,7 +469,7 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
     LogFovReadable(report);
 
     report.State = DecideTracking(report.Gate, g_trackingEnabled.load(std::memory_order_relaxed),
-                                  report.HavePose, rig.AimingDownSights, GetAdsMode());
+                                  report.HavePose, rig.AimingDownSights);
 
     // The shot's own ray, cast into the world this frame. BasePlayer overrides
     // GetActorEyesViewPoint to return FirstPersonCameraComponent's world
@@ -502,7 +498,6 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
         g_leanClamp.Reset();
         torch_aim::Center(rig);
         reticle::Publish(controller, rig.Pawn, false, 0.0f, 0.0f);
-        reticle::PublishMarker(controller, false, 0.0f, 0.0f);
         g_lastAim = Sample(aimOrigin, aimDir, report, *outLocation);
         LogHeartbeat(report, retRva);
         return;
@@ -511,14 +506,14 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
     float offX = 0.0f, offY = 0.0f, offZ = 0.0f;
     const bool havePosition = session->GetPositionOffset(offX, offY, offZ);
 
-    AdsEntryPose::Pose absolute;
+    ads_pose::Pose absolute;
     absolute.yaw = yaw;
     absolute.pitch = pitch;
     absolute.roll = roll;
     absolute.x = offX;
     absolute.y = offY;
     absolute.z = offZ;
-    AdsEntryPose::Pose pose = ads_pose::Advance(report.State, report.HavePose, absolute, tick).Pose;
+    ads_pose::Pose pose = ads_pose::Advance(report.State.aiming, absolute, tick);
 
     if (g_poseSinceMs == 0) g_poseSinceMs = tick;
     ShapePose(pose, EntryEase(tick - g_poseSinceMs), report.ZoomFactor);
@@ -555,8 +550,6 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
     g_lastAim = Sample(aimOrigin, aimDir, report, *outLocation);
 
     // The game's crosshair follows the impact point whenever the pose is applied.
-    // Raising the sights hides it, so in the `marker` ADS mode the mod shows its
-    // own instance of the crosshair there instead.
     // Clamped to the frame edge rather than dropped. The mark leaves the frame
     // at about 25 degrees of head pitch on a 16:9 display at the game's default
     // field of view, which is ordinary head movement, and handing the reticle
@@ -564,13 +557,9 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
     // centre, the one place the rounds are certainly not going. A mark with no
     // direction at all still restores: with no projection there is nothing
     // better to say than what the game already drew.
-    const bool onScreen = aim_projection::OnScreen(report.Mark);
-    report.MarkOnScreen = onScreen;
+    report.MarkOnScreen = aim_projection::OnScreen(report.Mark);
     reticle::Publish(controller, rig.Pawn, report.Mark.Valid, Clamp1(report.Mark.X),
                      Clamp1(report.Mark.Y));
-    report.MarkerShown = reticle::PublishMarker(
-        controller, marker_rule::ShowAdsMarker(true, report.State.aiming, GetAdsMode(), onScreen),
-        report.Mark.X, report.Mark.Y);
 
     LogHeartbeat(report, retRva);
 }

@@ -158,9 +158,44 @@ void TestAPortOutsideTheRangeFallsBack() {
 }
 
 void TestAnUnbindableHotkeyFallsBack() {
-    const Config c = Load("[Hotkeys]\r\nYawMode=0x230\r\nAdsMode=0x10\r\n");
-    CHECK_MSG(c.yaw_mode_key == 0x22, "a key code the poller cannot watch must not be bound");
-    CHECK_MSG(c.ads_mode_key == 0x2D, "a modifier must not be bound");
+    CHECK_MSG(Load("[Hotkeys]\r\nYawMode=0x230\r\n").yaw_mode_key == 0x22,
+              "a key code the poller cannot watch must not be bound");
+    CHECK_MSG(Load("[Hotkeys]\r\nYawMode=0x10\r\n").yaw_mode_key == 0x22,
+              "a modifier must not be bound");
+}
+
+// Builds before the ADS cycle was retired wrote [View] AdsMode and a
+// [Hotkeys] AdsMode key. Such a file has to load as if they were not there,
+// with every setting beside them still taken.
+void TestAnIniFromTheOldAdsCycleStillLoads() {
+    const Config c = Load(
+        "[Tracking]\r\nLocalSmoothing=0.25\r\n"
+        "[View]\r\nAdsMode=marker\r\n"
+        "[General]\r\nWorldSpaceYaw=0\r\n"
+        "[Hotkeys]\r\nYawMode=0x2E\r\nAdsMode=0x2D\r\n");
+    CHECK_NEAR(c.local_smoothing, 0.25, 1e-6);
+    CHECK(c.world_space_yaw == false);
+    CHECK(c.yaw_mode_key == 0x2E);
+}
+
+std::string ReadIni() {
+    std::string text;
+    FILE* f = std::fopen(IniPath().c_str(), "rb");
+    if (!f) return text;
+    char buf[4096];
+    std::size_t n = 0;
+    while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, n);
+    std::fclose(f);
+    return text;
+}
+
+void TestTheWrittenDefaultCarriesNoAdsSetting() {
+    DeleteFileA(IniPath().c_str());
+    t2_ht::config::WriteDefaultIfMissing(Directory());
+    const std::string text = ReadIni();
+    CHECK(!text.empty());
+    CHECK_MSG(text.find("AdsMode") == std::string::npos,
+              "the default INI must not offer an ADS setting or an ADS key");
 }
 
 // The lead is the one setting whose out-of-range value has a tempting wrong
@@ -197,8 +232,6 @@ void TestTheWrittenDefaultReadsBackAsTheDefaults() {
     CHECK(out.collision_enabled == d.collision_enabled);
     CHECK(out.world_space_yaw == d.world_space_yaw);
     CHECK(out.yaw_mode_key == d.yaw_mode_key);
-    CHECK(out.ads_mode_key == d.ads_mode_key);
-    CHECK(out.ads_mode == d.ads_mode);
     CHECK(out.light_follows_head == d.light_follows_head);
     CHECK(out.light_multiplier == d.light_multiplier);
 }
@@ -219,6 +252,8 @@ int main() {
     TestAnEmptyValueKeepsItsDefault();
     TestAPortOutsideTheRangeFallsBack();
     TestAnUnbindableHotkeyFallsBack();
+    TestAnIniFromTheOldAdsCycleStillLoads();
+    TestTheWrittenDefaultCarriesNoAdsSetting();
     TestTheTorchLeadIsTakenAndAnOutOfRangeOneIsRefused();
     TestTheDefaultFileIsNotOverwritten();
     TestTheWrittenDefaultReadsBackAsTheDefaults();

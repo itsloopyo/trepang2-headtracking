@@ -24,8 +24,6 @@ namespace {
 
 namespace ue = ::cameraunlock::unreal;
 
-// The ADS marker is a second instance of the game's crosshair widget.
-constexpr const char* kCrosshairClass = "WBCrosshair_C";
 constexpr int kMaxOuterDepth = 8;
 constexpr std::size_t kInternalIndexOffset = 0x0c;
 
@@ -102,47 +100,18 @@ ue_vm::ResolveRetry g_findRetry;
 // the viewport and DPI it was made against and the rest stay silent.
 bool g_bound = false;
 
-// ESlateVisibility
-constexpr std::uint8_t kCollapsed = 1;
-constexpr std::uint8_t kHitTestInvisible = 3;
-
-// Layout box the marker instance is given, in viewport units. The crosshair's
-// lines are anchored to the middle of its root canvas, so the box only has to
-// be large enough to hold them; the alignment centres it on the position.
-constexpr float kMarkerBox = 128.0f;
-
-std::uintptr_t g_widgetLib = 0;
-std::uintptr_t g_crosshairClass = 0;
-ue_call::Function g_create;           // WidgetBlueprintLibrary::Create
-ue_call::Function g_addToViewport;    // UserWidget::AddToViewport
-ue_call::Function g_setPosInViewport; // UserWidget::SetPositionInViewport
-ue_call::Function g_setDesiredSize;   // UserWidget::SetDesiredSizeInViewport
-ue_call::Function g_setAlignment;     // UserWidget::SetAlignmentInViewport
-ue_call::Function g_setVisibility;    // Widget::SetVisibility
-
 bool Resolve() {
     if (g_resolved) return true;
     if (!g_resolveRetry.Due() || !ue_vm::Ready()) return false;
     g_layoutLib = ue_call::DefaultObject("WidgetLayoutLibrary");
-    g_widgetLib = ue_call::DefaultObject("WidgetBlueprintLibrary");
-    g_crosshairClass = ue::FindLiveObject("WidgetBlueprintGeneratedClass", kCrosshairClass, nullptr);
     const std::size_t ptr = sizeof(std::uintptr_t);
     const std::size_t v2 = sizeof(ue4::FVector2D);
-    if (!g_layoutLib || !g_widgetLib || !g_crosshairClass ||
+    if (!g_layoutLib ||
         !g_setTranslation.Resolve("Widget", "SetRenderTranslation", {{"Translation", v2}}) ||
         !g_viewportScale.Resolve("WidgetLayoutLibrary", "GetViewportScale",
                                  {{"WorldContextObject", ptr}, {"ReturnValue", sizeof(float)}}) ||
         !g_viewportSize.Resolve("WidgetLayoutLibrary", "GetViewportSize",
-                                {{"WorldContextObject", ptr}, {"ReturnValue", v2}}) ||
-        !g_create.Resolve("WidgetBlueprintLibrary", "Create",
-                          {{"WorldContextObject", ptr}, {"WidgetType", ptr}, {"OwningPlayer", ptr},
-                           {"ReturnValue", ptr}}) ||
-        !g_addToViewport.Resolve("UserWidget", "AddToViewport", {{"ZOrder", sizeof(std::int32_t)}}) ||
-        !g_setPosInViewport.Resolve("UserWidget", "SetPositionInViewport",
-                                    {{"Position", v2}, {"bRemoveDPIScale", 1}}) ||
-        !g_setDesiredSize.Resolve("UserWidget", "SetDesiredSizeInViewport", {{"Size", v2}}) ||
-        !g_setAlignment.Resolve("UserWidget", "SetAlignmentInViewport", {{"Alignment", v2}}) ||
-        !g_setVisibility.Resolve("Widget", "SetVisibility", {{"InVisibility", 1}}))
+                                {{"WorldContextObject", ptr}, {"ReturnValue", v2}}))
         return false;
     g_resolved = true;
     return true;
@@ -374,69 +343,6 @@ bool Move(float x, float y) {
     return true;
 }
 
-// ---- the ADS marker instance ----------------------------------------------
-std::uintptr_t g_marker = 0;
-std::int32_t g_markerIndex = -1;
-std::uintptr_t g_markerController = 0;
-bool g_markerShown = false;
-float g_markerX = -1.0f, g_markerY = -1.0f;
-
-void SetMarkerShown(bool shown) {
-    if (shown == g_markerShown) return;
-    ue_call::Frame vis(g_setVisibility);
-    vis.Set(0, shown ? kHitTestInvisible : kCollapsed);
-    // Only on a dispatch that landed. Committing regardless desyncs the flag
-    // from the widget, and every later call with the same value is then skipped
-    // by the guard above - so the marker never reappears, or never hides.
-    if (vis.Call(g_marker)) g_markerShown = shown;
-}
-
-// Hide before dropping the handle. A widget let go of while visible stays in
-// the viewport at its last position with nothing owning it, and the next frame
-// adds a SECOND crosshair instance - an abandoned mark sitting at a stale aim
-// point for the rest of the level.
-//
-// Only while it is still live: a dead object is already out of the viewport,
-// and dispatching into it spends a ProcessEvent round trip on the render path
-// to have the fault absorbed.
-void DropMarker() {
-    if (g_marker && StillAlive(g_marker, g_markerIndex)) SetMarkerShown(false);
-    g_marker = 0;
-    g_markerIndex = -1;
-}
-
-bool BuildMarker(std::uintptr_t controller) {
-    ue_call::Frame create(g_create);
-    create.Set(0, controller);
-    create.Set(1, g_crosshairClass);
-    create.Set(2, controller);
-    if (!create.Call(g_widgetLib)) return false;
-    const auto widget = create.Get<std::uintptr_t>(3);
-    std::uint32_t index = 0;
-    if (!widget || !ue::SafeReadU32(widget + kInternalIndexOffset, index)) return false;
-
-    ue_call::Frame size(g_setDesiredSize);
-    size.Set(0, ue4::FVector2D{kMarkerBox, kMarkerBox});
-    size.Call(widget);
-    ue_call::Frame align(g_setAlignment);
-    align.Set(0, ue4::FVector2D{0.5f, 0.5f});
-    align.Call(widget);
-    ue_call::Frame vis(g_setVisibility);
-    vis.Set(0, kCollapsed);
-    vis.Call(widget);
-    ue_call::Frame add(g_addToViewport);
-    add.Set(0, std::int32_t{10000});
-    if (!add.Call(widget)) return false;
-
-    g_marker = widget;
-    g_markerIndex = static_cast<std::int32_t>(index);
-    g_markerController = controller;
-    g_markerShown = false;
-    g_markerX = g_markerY = -1.0f;
-    Log::Line("reticle: ADS marker built (0x%llx)", static_cast<unsigned long long>(widget));
-    return true;
-}
-
 // The viewport size and DPI scale, or false when they do not read.
 bool Viewport(std::uintptr_t controller, ue4::FVector2D& size, float& dpi) {
     ue_call::Frame sizeFrame(g_viewportSize);
@@ -519,41 +425,6 @@ void ReadBackPanels(std::uintptr_t controller, bool settled, float askedX, float
 }
 
 }  // namespace
-
-bool PublishMarker(std::uintptr_t controller, bool visible, float ndcX, float ndcY) {
-    if (g_marker && (controller != g_markerController || !StillAlive(g_marker, g_markerIndex))) {
-        DropMarker();
-    }
-    if (!visible) {
-        if (g_marker) SetMarkerShown(false);
-        return false;
-    }
-    if (!controller || !Resolve()) return false;
-    if (!g_marker && !BuildMarker(controller)) return false;
-
-    ue4::FVector2D viewport{};
-    float dpi = 1.0f;
-    if (!Viewport(controller, viewport, dpi)) {
-        SetMarkerShown(false);
-        return false;
-    }
-    // Absolute viewport pixels; SetPositionInViewport removes the DPI scale itself.
-    const float x = std::round((ndcX + 1.0f) * 0.5f * viewport.X);
-    const float y = std::round((1.0f - ndcY) * 0.5f * viewport.Y);
-    if (x != g_markerX || y != g_markerY) {
-        ue_call::Frame pos(g_setPosInViewport);
-        pos.Set(0, ue4::FVector2D{x, y});
-        pos.Set(1, std::uint8_t{1});
-        if (!pos.Call(g_marker)) {
-            DropMarker();
-            return false;
-        }
-        g_markerX = x;
-        g_markerY = y;
-    }
-    SetMarkerShown(true);
-    return true;
-}
 
 void Publish(std::uintptr_t controller, std::uintptr_t pawn, bool valid, float ndcX, float ndcY) {
     if (!pawn || !Resolve() || !Bind(pawn)) return;

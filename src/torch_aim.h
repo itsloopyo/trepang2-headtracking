@@ -66,8 +66,7 @@ void Apply(const player_rig::Snapshot& rig, double yaw, double pitch, double rol
            bool worldSpaceYaw);
 
 // Put the beam back on the game's own aim. Every frame that applies no pose
-// calls this - menus, loading, death, tracking toggled off, the sights up in
-// the paused ADS mode.
+// calls this - menus, loading, death, tracking toggled off.
 void Center(const player_rig::Snapshot& rig);
 
 // For the heartbeat: off, aim, following, or why it is none of those.

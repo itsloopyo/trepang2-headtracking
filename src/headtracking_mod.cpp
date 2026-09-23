@@ -11,7 +11,6 @@
 
 #include <windows.h>
 
-#include "ads.h"
 #include "builds/build_registry.h"
 #include "crash_report.h"
 #include "dev_console.h"
@@ -88,7 +87,6 @@ void LoadSettings() {
     }
     config::WriteDefaultIfMissing(exeDir);
     config::Load(exeDir, g_config);
-    SetAdsMode(g_config.ads_mode);
     dev_console::SetEnabled(g_config.dev_commands, exeDir);
     view_hook::SetWorldSpaceYaw(g_config.world_space_yaw);
 }

@@ -15,7 +15,6 @@
 
 #include <windows.h>
 
-#include "ads.h"
 #include "inject_mode.h"
 #include "ue4_types.h"
 #include "builds/build_registry.h"
@@ -720,11 +719,6 @@ void CmdShotLog(const std::string&, std::uintptr_t) {
     InstallShotLog();
 }
 
-void CmdAdsMode(const std::string& rest, std::uintptr_t) {
-    SetAdsMode(ParseAdsMode(rest.c_str()));
-    Log::Line("dev: ads mode %s", AdsModeValue(GetAdsMode()));
-}
-
 void CmdInject(const std::string& rest, std::uintptr_t) {
     long mode = 0;
     if (!ParseInt(rest, mode)) {
@@ -983,7 +977,6 @@ constexpr Verb kVerbs[] = {
     {"wtree", &CmdWidgetTree},
     {"giveweapon", &CmdGiveWeapon},
     {"shotlog", &CmdShotLog},
-    {"adsmode", &CmdAdsMode},
     {"inject", &CmdInject},
     {"report", &CmdReport},
     {"tracking", &CmdTracking},

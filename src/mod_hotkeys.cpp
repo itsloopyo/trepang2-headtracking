@@ -9,7 +9,6 @@
 
 #include <windows.h>
 
-#include "ads.h"
 #include "logging.h"
 #include "view_hook.h"
 
@@ -32,11 +31,10 @@ using cameraunlock::input::NavGuarded;
 // DualWield and T to ToggleFlashlight by default. So the fleet's Ctrl+Shift+G
 // would also throw a grenade and Ctrl+Shift+H would dual wield. The tracking
 // mode cycle takes the next free letter in the cluster, J, and the yaw-mode
-// toggle, with no free letter left, keeps only its nav-cluster key.
+// toggle keeps only its nav-cluster key.
 constexpr int kVkEnd    = 0x23;
 constexpr int kVkPageUp = 0x21;
 constexpr int kVkY      = 0x59;
-constexpr int kVkU      = 0x55;
 constexpr int kVkJ      = 0x4A;
 
 // How often the poller samples the keyboard, in milliseconds.
@@ -57,17 +55,6 @@ void CycleTrackingMode() {
                      : mode == TrackingMode::PositionOnly ? "position only"
                                                           : "rotation and position";
     Log::Line("hotkey: tracking mode -> %s", name);
-}
-
-// The mode the frame walk reads once per frame, so the change lands on the aim
-// that is already in progress rather than on the next one. Saved as it is
-// cycled, because the choice is the player's and a firefight is a bad place to
-// lose it.
-void CycleAdsMode() {
-    const AdsMode next = NextAdsMode(GetAdsMode());
-    SetAdsMode(next);
-    config::SaveAdsMode(next);
-    Log::Line("hotkey: %s", AdsModeToast(next));
 }
 
 void ToggleYawMode() {
@@ -104,13 +91,11 @@ void Register(const Config& config, Session& session) {
     g_poller->AddHotkey(kVkEnd,    NavGuarded([] { ToggleTracking(); }));
     g_poller->AddHotkey(kVkPageUp, NavGuarded([] { CycleTrackingMode(); }));
     addNav(config.yaw_mode_key, "YawMode", &ToggleYawMode);
-    addNav(config.ads_mode_key, "AdsMode", &CycleAdsMode);
 
     // Ctrl+Shift chord alternatives. No chord for the yaw mode: see the key
     // table above.
     g_poller->AddHotkey(kVkY, ChordGuarded([] { ToggleTracking(); }));
     g_poller->AddHotkey(kVkJ, ChordGuarded([] { CycleTrackingMode(); }));
-    g_poller->AddHotkey(kVkU, ChordGuarded([] { CycleAdsMode(); }));
 
     g_poller->Start(kPollIntervalMs);
 }

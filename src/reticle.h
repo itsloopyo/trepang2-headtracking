@@ -23,12 +23,4 @@ namespace t2_ht::reticle {
 // does. `ndcX` / `ndcY` are -1..1, x right and y up.
 void Publish(std::uintptr_t controller, std::uintptr_t pawn, bool valid, float ndcX, float ndcY);
 
-// The aim marker for the `marker` ADS mode. Raising the sights hides the game's
-// crosshair (the sight picture is the aim), so while head tracking carries on
-// through an aim the mod puts a second instance of the game's own crosshair
-// widget in the viewport at the projected impact point. Called every render
-// frame, with `visible` false whenever the marker should not be on screen.
-// Returns whether the marker is on screen after the call.
-bool PublishMarker(std::uintptr_t controller, bool visible, float ndcX, float ndcY);
-
 }  // namespace t2_ht::reticle

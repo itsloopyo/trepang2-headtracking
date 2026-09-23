@@ -9,8 +9,6 @@
 #include <cstdio>
 #include <string>
 
-#include <windows.h>
-
 #include "logging.h"
 
 #include "cameraunlock/config/ini_reader.h"
@@ -22,8 +20,6 @@ namespace t2_ht::config {
 namespace {
 
 constexpr const char* kIniName = "HeadTracking.ini";
-
-std::string g_iniPath;
 
 std::string IniPath(const std::string& exe_dir) { return exe_dir + "\\" + kIniName; }
 
@@ -96,10 +92,8 @@ void ReadInt(const cameraunlock::IniReader& ini, const char* section, const char
 }  // namespace
 
 void Load(const std::string& exe_dir, Config& out) {
-    g_iniPath = IniPath(exe_dir);
-
     cameraunlock::IniReader ini;
-    if (!ini.Open(g_iniPath)) {
+    if (!ini.Open(IniPath(exe_dir))) {
         Log::Line("config: no %s next to the game exe - using defaults", kIniName);
         return;
     }
@@ -114,11 +108,8 @@ void Load(const std::string& exe_dir, Config& out) {
     ReadFloat(ini, "Tracking", "LocalSmoothing", 0.0f, 1.0f, out.local_smoothing);
     ReadFloat(ini, "Tracking", "RemoteSmoothing", 0.0f, 1.0f, out.remote_smoothing);
 
-    out.ads_mode = ParseAdsMode(
-        ini.ReadString("View", "AdsMode", AdsModeValue(kDefaultAdsMode)).c_str());
     ReadBool(ini, "General", "WorldSpaceYaw", out.world_space_yaw);
 
-    out.ads_mode_key = ReadVirtualKey(ini, "AdsMode", out.ads_mode_key);
     out.yaw_mode_key = ReadVirtualKey(ini, "YawMode", out.yaw_mode_key);
 
     ReadBool(ini, "Camera", "CollisionEnabled", out.collision_enabled);
@@ -134,11 +125,11 @@ void Load(const std::string& exe_dir, Config& out) {
 
     ReadBool(ini, "Dev", "DevCommands", out.dev_commands);
 
-    Log::Line("config: %s loaded (udpPort=%d, smoothing local=%.2f remote=%.2f, adsMode=%s, "
+    Log::Line("config: %s loaded (udpPort=%d, smoothing local=%.2f remote=%.2f, "
               "yaw=%s, collision=%d margin=%.1f channel=%d, aimChannel=%d, "
               "torch=%d x%.2f)",
               kIniName, out.udp_port, out.local_smoothing, out.remote_smoothing,
-              AdsModeValue(out.ads_mode), out.world_space_yaw ? "world" : "local",
+              out.world_space_yaw ? "world" : "local",
               out.collision_enabled ? 1 : 0, out.collision_margin, out.collision_channel,
               out.aim_trace_channel, out.light_follows_head ? 1 : 0, out.light_multiplier);
 }
@@ -168,14 +159,6 @@ void WriteDefaultIfMissing(const std::string& exe_dir) {
         "LocalSmoothing=%.2f\r\n"
         "RemoteSmoothing=%.2f\r\n"
         "\r\n"
-        "[View]\r\n"
-        "; What head tracking does while you aim down sights. Insert (or\r\n"
-        "; Ctrl+Shift+U) cycles this in game and saves it here.\r\n"
-        ";   paused   - tracking stands down for the aim (default)\r\n"
-        ";   marker   - tracking stays on, with a crosshair where the rounds land\r\n"
-        ";   tracked  - tracking stays on, no crosshair\r\n"
-        "AdsMode=%s\r\n"
-        "\r\n"
         "[General]\r\n"
         "; 1 = head yaw turns about the world's up axis (horizon stays level).\r\n"
         "; 0 = about the camera's own up axis. Page Down toggles this for the\r\n"
@@ -199,23 +182,14 @@ void WriteDefaultIfMissing(const std::string& exe_dir) {
         "\r\n"
         "[Hotkeys]\r\n"
         "; Virtual-key codes. End (toggle tracking), Page Up (cycle tracking\r\n"
-        "; mode) and the Ctrl+Shift chords (Y, J, U) are fixed.\r\n"
-        "YawMode=0x%02X\r\n"
-        "AdsMode=0x%02X\r\n",
-        d.udp_port, d.local_smoothing, d.remote_smoothing, AdsModeValue(kDefaultAdsMode),
+        "; mode) and the Ctrl+Shift chords (Y, J) are fixed.\r\n"
+        "YawMode=0x%02X\r\n",
+        d.udp_port, d.local_smoothing, d.remote_smoothing,
         d.world_space_yaw ? 1 : 0, d.collision_enabled ? 1 : 0,
         d.collision_margin, d.light_follows_head ? 1 : 0, d.light_multiplier,
-        d.yaw_mode_key, d.ads_mode_key);
+        d.yaw_mode_key);
     std::fclose(f);
     Log::Line("config: wrote default %s", path.c_str());
-}
-
-void SaveAdsMode(AdsMode mode) {
-    if (g_iniPath.empty()) return;
-    if (!WritePrivateProfileStringA("View", "AdsMode", AdsModeValue(mode), g_iniPath.c_str())) {
-        Log::Line("config: could not save AdsMode to %s (error %lu) - the setting applies "
-                  "for this session only", g_iniPath.c_str(), GetLastError());
-    }
 }
 
 }  // namespace t2_ht::config

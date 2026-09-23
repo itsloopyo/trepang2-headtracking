@@ -103,21 +103,18 @@ Both columns do the same thing where both are listed. Use whichever your keyboar
 | Toggle tracking     | `End`       | `Ctrl+Shift+Y` |
 | Cycle tracking mode | `Page Up`   | `Ctrl+Shift+J` |
 | Toggle yaw mode     | `Page Down` | none           |
-| Cycle ADS mode      | `Insert`    | `Ctrl+Shift+U` |
 
 Trepang2 runs its own key bindings whether or not Ctrl and Shift are held, and it binds `G` to throwing a grenade and `H` to dual wielding by default. The chords other mods in this series use for the tracking mode and the yaw mode (`Ctrl+Shift+G` and `Ctrl+Shift+H`) would do both at once here, so the tracking mode cycle uses `Ctrl+Shift+J` instead and the yaw mode toggle has no chord. Trepang2 fires its bindings with Ctrl and Shift held, so whatever you have on those two keys also happens while the chord is down.
 
 **Cycle tracking mode** steps through rotation and position, then rotation only, then position only.
 
-`Insert` / `Ctrl+Shift+U` cycles what happens when you aim down sights. Not every weapon in Trepang2 can aim down sights; the game's all-weapons ADS cheat lets all of them. All three modes start the same way - raising the sights swings the view onto the point the weapon is aimed at, so your shot lands where you had it lined up - and they differ in what happens for the rest of the aim:
-
-1. **Tracking paused** (default) - the game keeps the camera for as long as the sights are up. The sight picture is exactly the game's, and head movement does nothing until you lower the weapon.
-2. **Tracking on, with an aim marker** - head tracking carries on from the snapped position, and a crosshair is drawn wherever your rounds will actually land. This crosshair is authoritative, including with scoped weapons. A scope's built-in reticle is only accurate while your eye is exactly aligned with the optic, so the two reticles separate when head tracking moves your view off that sight line.
-3. **Tracking on, no aim marker** - the same as 2 without the marker, for a cleaner screen when you are happy reading the sights themselves.
-
-The choice is saved, so it survives a restart, and the mode you switched to is named in `HeadTracking.log`.
-
 **Toggle yaw mode** switches which axis head yaw turns about. Horizon-locked is the default: yaw goes about the world up-axis, so looking at the floor and turning your head pans across it. Camera-local turns about the camera's own up-axis instead, which leans the horizon when the camera is pitched steeply. It applies for the session and is not written back to the file.
+
+### Aiming down sights
+
+Head tracking stays on while you aim. The weapon stays where your mouse or controller points it, so with your head turned it sits off to one side with its sights still lined up, and your rounds land where those sights point. Head movement is scaled to the zoom, so a scope does not magnify it.
+
+Leaning eases out while the sights are up, because it would move your eye off them.
 
 ## Configuration
 
@@ -134,14 +131,6 @@ Port=4242
 ; including this PC's own LAN address.
 LocalSmoothing=0.00
 RemoteSmoothing=0.15
-
-[View]
-; What head tracking does while you aim down sights. Insert (or
-; Ctrl+Shift+U) cycles this in game and saves it here.
-;   paused   - tracking stands down for the aim (default)
-;   marker   - tracking stays on, with a crosshair where the rounds land
-;   tracked  - tracking stays on, no crosshair
-AdsMode=paused
 
 [General]
 ; 1 = head yaw turns about the world's up axis (horizon stays level).
@@ -166,9 +155,8 @@ LightMultiplier=1.50
 
 [Hotkeys]
 ; Virtual-key codes. End (toggle tracking), Page Up (cycle tracking
-; mode) and the Ctrl+Shift chords (Y, J, U) are fixed.
+; mode) and the Ctrl+Shift chords (Y, J) are fixed.
 YawMode=0x22
-AdsMode=0x2D
 ```
 
 ### Field of view
@@ -183,7 +171,7 @@ The torch points along your aim, so without the mod head tracking turns the view
 
 It turns further than the view does - `LightMultiplier` times as far, 1.5 by default. When you turn your head you keep your eyes on the thing you turned towards, so what you are actually looking at sits past the middle of the screen, and a beam that only matched the view would land short of it. Set it to `1.0` to have the beam sit where the view is pointed, or to `0` to leave the torch on the aim, which is what the game does unmodded. A value outside 0 to 5 is refused with a line in the log and the default stands.
 
-Nothing else about the torch changes: only which way it points is the mod's, and its brightness and its cone stay the game's. Aiming decides where the rounds go, and the beam moving does not touch that. Whenever tracking is not being applied - a menu, a loading screen, a cutscene, tracking toggled off with `End`, or the sights up in the default ADS mode - the beam goes back on the game's own aim. The `torch=` field in the log's heartbeat line says which of those it is doing.
+Nothing else about the torch changes: only which way it points is the mod's, and its brightness and its cone stay the game's. Aiming decides where the rounds go, and the beam moving does not touch that. Whenever tracking is not being applied - a menu, a loading screen, a cutscene, or tracking toggled off with `End` - the beam goes back on the game's own aim. The `torch=` field in the log's heartbeat line says which of those it is doing.
 
 ### Window placement
 
@@ -222,6 +210,10 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 **The crosshair moves when I turn my head:**
 
 - By design. It moves to stay on the point your rounds will land, which is no longer the middle of the screen once your head is turned or leaning. The stealth dot, the kill marker and the tactical visor crosshair move with it. Bullet spread still scatters shots around that point the way it does around the middle of the screen without the mod.
+
+**The weapon is off to one side when I aim down sights.**
+
+- Your head is turned: the weapon stays on your aim and you are looking past it. Turn back to it, or move your aim to where you are looking.
 
 **Known limitations:**
 

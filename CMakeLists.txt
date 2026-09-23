@@ -39,7 +39,6 @@ set(MOD_SOURCES
     src/view_hook.cpp
     src/mod_hotkeys.cpp
     src/window_centering.cpp
-    src/ads.cpp
     src/ads_pose.cpp
     src/reticle.cpp
     src/process_event_hook.cpp
@@ -103,8 +102,8 @@ option(T2_BUILD_TESTS "Build the behaviour tests" ON)
 if(T2_BUILD_TESTS)
     enable_testing()
 
-    # The aim-down-sights layer: the verdict walk, and what the sights do to the
-    # head pose. Both run with no game and no graphics device.
+    # The aim-down-sights layer: the verdict walk, and the lean the sights ease
+    # out. Both run with no game and no graphics device.
     add_executable(t2_ads_gate_tests
         tests/ads_gate_tests.cpp
     )
@@ -198,7 +197,6 @@ if(T2_BUILD_TESTS)
 
     add_executable(t2_ads_pose_tests
         tests/ads_pose_tests.cpp
-        src/ads.cpp
         src/ads_pose.cpp
     )
     target_include_directories(t2_ads_pose_tests PRIVATE
