@@ -49,13 +49,10 @@ struct Config {
 
     std::string toggle_key =
         cameraunlock::config::schema::ConceptTraits<cameraunlock::config::schema::Concept::ToggleKey>::kCanonicalDefault;
-    // Trepang2 fires its own key bindings whether or not Ctrl and Shift are held
-    // (Ctrl+Shift+R reloads), and binds G to ThrowGrenade and H to DualWield. So
-    // the fleet's Ctrl+Shift+G would also throw a grenade and Ctrl+Shift+H would
-    // dual wield: the mode cycle takes J, the next free letter of the chord
-    // cluster, and the yaw toggle keeps only Page Down, as every earlier build did.
-    std::string cycle_tracking_mode_key = "PageUp, Ctrl+Shift+J";
-    std::string yaw_mode_key = "PageDown";
+    std::string cycle_tracking_mode_key = cameraunlock::config::schema::ConceptTraits<
+        cameraunlock::config::schema::Concept::CycleTrackingModeKey>::kCanonicalDefault;
+    std::string yaw_mode_key =
+        cameraunlock::config::schema::ConceptTraits<cameraunlock::config::schema::Concept::YawModeKey>::kCanonicalDefault;
 
     // Dev only.
     bool dev_commands = false;

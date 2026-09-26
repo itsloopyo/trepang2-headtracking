@@ -101,10 +101,10 @@ Both columns do the same thing where both are listed. Use whichever your keyboar
 | Action              | Nav-cluster | Chord          |
 |---------------------|-------------|----------------|
 | Toggle tracking     | `End`       | `Ctrl+Shift+Y` |
-| Cycle tracking mode | `Page Up`   | `Ctrl+Shift+J` |
-| Toggle yaw mode     | `Page Down` | none           |
+| Cycle tracking mode | `Page Up`   | `Ctrl+Shift+G` |
+| Toggle yaw mode     | `Page Down` | `Ctrl+Shift+H` |
 
-Trepang2 runs its own key bindings whether or not Ctrl and Shift are held, and it binds `G` to throwing a grenade and `H` to dual wielding by default. The chords other mods in this series use for the tracking mode and the yaw mode (`Ctrl+Shift+G` and `Ctrl+Shift+H`) would do both at once here, so the tracking mode cycle uses `Ctrl+Shift+J` instead and the yaw mode toggle has no chord. Trepang2 fires its bindings with Ctrl and Shift held, so whatever you have on those two keys also happens while the chord is down.
+Trepang2 runs its own key bindings whether or not Ctrl and Shift are held, and it binds `G` to throwing a grenade and `H` to dual wielding by default. With those bindings, `Ctrl+Shift+G` also throws a grenade and `Ctrl+Shift+H` also dual wields, and whatever you have on `Y`, `G` or `H` in the game also happens while you press that chord. To use other keys, change `CycleTrackingModeKey` and `YawModeKey` in `CameraUnlock.ini`.
 
 One press fires one action. If two actions' lists name a key that a single press would fire both of (`End` in two lists, or `End` in one and `Ctrl+End` in another), the key stays with the action listed first in `[Hotkeys]`, and the log's `hotkey:` line names the one it was left out of. That includes a key a list takes from `Defaults.ini`.
 
@@ -162,6 +162,8 @@ The built-in value of each setting set to `default` below:
 - `CollisionEnabled=true`
 - `CollisionReleaseSmoothing=0.9`
 - `ToggleKey=End, Ctrl+Shift+Y`
+- `CycleTrackingModeKey=PageUp, Ctrl+Shift+G`
+- `YawModeKey=PageDown, Ctrl+Shift+H`
 - `LightFollowsHead=true`
 - `LightMultiplier=1.5`
 
@@ -221,9 +223,9 @@ CollisionReleaseSmoothing=default
 ; Turns head tracking on and off.
 ToggleKey=default
 ; Changes the tracking mode: rotation and position, rotation only, position only.
-CycleTrackingModeKey=PageUp, Ctrl+Shift+J
+CycleTrackingModeKey=default
 ; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
-YawModeKey=PageDown
+YawModeKey=default
 
 [Light]
 ; true: a light you carry points where you look instead of where you aim.
@@ -286,7 +288,7 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 
 **Yaw feels wrong when looking up or down at extreme angles:**
 
-- Press `Page Down` to switch yaw mode. Horizon-locked, the default, turns head yaw about the world's up axis, so the horizon stays level however steeply the camera is pitched. Camera-local turns it about the camera's own up axis instead, which tilts the horizon as you turn while looking up or down. Press it again to go back.
+- Press `Page Down` or `Ctrl+Shift+H` to switch yaw mode. Horizon-locked, the default, turns head yaw about the world's up axis, so the horizon stays level however steeply the camera is pitched. Camera-local turns it about the camera's own up axis instead, which tilts the horizon as you turn while looking up or down. Press it again to go back.
 
 **Leaning into a wall stops short:**
 

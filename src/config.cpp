@@ -27,6 +27,7 @@ namespace {
 
 namespace cfg = ::cameraunlock::config;
 using cfg::schema::Concept;
+using cfg::schema::ConceptTraits;
 using ::cameraunlock::input::FormatKeyBindings;
 using ::cameraunlock::input::KeyModifiers;
 
@@ -41,12 +42,12 @@ constexpr double kMaxTraceChannel = 31;
 
 constexpr KeyModifiers kChord = KeyModifiers::kCtrl | KeyModifiers::kShift;
 
-// The keys every build before the canonical format bound in code rather than in
-// the file.
+// The toggle keys every build before the canonical format bound in code rather
+// than in the file, and the yaw key's default there.
 constexpr int kVkEnd = 0x23;
 constexpr int kVkPageUp = 0x21;
 constexpr int kVkY = 0x59;
-constexpr int kVkJ = 0x4A;
+constexpr int kVkPageDown = 0x22;
 
 std::unique_ptr<cfg::ConfigOwner<Config>> g_owner;
 
@@ -100,13 +101,22 @@ cfg::ImportResult RunImport(const cfg::LegacyInput& input, Config& out) {
     out.dev_commands = read.dev_commands;
 
     // End, Page Up and the Ctrl+Shift+Y and Ctrl+Shift+J chords were bound in
-    // code; only the yaw key was in the file, and the reader keeps it inside
-    // 0x01-0xFE. The build refused a yaw key that was End or Page Up, which
-    // already had an action, and bound the yaw toggle to nothing.
+    // code, so no player chose them; only the yaw key was in the file, and the
+    // reader keeps it inside 0x01-0xFE. The owner ruled (2026-09-26) that the
+    // mode and yaw keys take the fleet's lists: the mode cycle's J chord and the
+    // yaw key's default, Page Down with no chord, become the fleet default, and a
+    // yaw key the player changed stays theirs. The build refused a yaw key that
+    // was End or Page Up, which already had an action, and bound the yaw toggle
+    // to nothing.
     out.toggle_key = FormatKeyBindings({{KeyModifiers::kNone, kVkEnd}, {kChord, kVkY}});
-    out.cycle_tracking_mode_key = FormatKeyBindings({{KeyModifiers::kNone, kVkPageUp}, {kChord, kVkJ}});
-    const bool yaw_refused = read.yaw_mode_key == kVkEnd || read.yaw_mode_key == kVkPageUp;
-    out.yaw_mode_key = yaw_refused ? std::string() : FormatKeyBindings({{KeyModifiers::kNone, read.yaw_mode_key}});
+    out.cycle_tracking_mode_key = ConceptTraits<Concept::CycleTrackingModeKey>::kCanonicalDefault;
+    if (read.yaw_mode_key == kVkPageDown) {
+        out.yaw_mode_key = ConceptTraits<Concept::YawModeKey>::kCanonicalDefault;
+    } else if (read.yaw_mode_key == kVkEnd || read.yaw_mode_key == kVkPageUp) {
+        out.yaw_mode_key.clear();
+    } else {
+        out.yaw_mode_key = FormatKeyBindings({{KeyModifiers::kNone, read.yaw_mode_key}});
+    }
 
     return present ? cfg::ImportResult::Imported({}) : cfg::ImportResult::Absent({});
 }
@@ -134,9 +144,7 @@ cfg::ConfigTable<Config> Table() {
         .Concept<Concept::CollisionReleaseSmoothing>(&Config::collision_release_smoothing)
         .Concept<Concept::ToggleKey>(&Config::toggle_key)
         .Concept<Concept::CycleTrackingModeKey>(&Config::cycle_tracking_mode_key)
-        .PerGame()
         .Concept<Concept::YawModeKey>(&Config::yaw_mode_key)
-        .PerGame()
         .Concept<Concept::LightFollowsHead>(&Config::light_follows_head)
         .Concept<Concept::LightMultiplier>(&Config::light_multiplier)
         .Local("Aim", "AimTraceChannel", &Config::aim_trace_channel, cfg::IntCodec<int>(),

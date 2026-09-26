@@ -18,17 +18,17 @@
 // the file is read. Each one is listed below with its commit.
 //
 // Comparison 2, import against migration, is the proof for the conversion. It
-// allows no difference: the file carried no pose shaping and no reticle setting,
-// the reader lets through no value that is not finite, the yaw key it keeps is
-// inside 0x01-0xFE, and no default moved, so the no-file input may not differ
-// either.
+// allows one difference, the owner's ruling of 2026-09-26 that the mode and yaw
+// hotkeys take the fleet's lists (NormalisedHotkeys): the file carried no pose
+// shaping and no reticle setting, the reader lets through no value that is not
+// finite, the yaw key it keeps is inside 0x01-0xFE, and no default moved, so the
+// no-file input may not differ either.
 //
 // Each input migrates three times: over a Defaults.ini the owner creates with the
 // built-in values, from a read-only HeadTracking.ini, and over a Defaults.ini
 // that differs from the built-in value on every global row. All three give the
 // settings the import read, since the migration writes `default` only where the
-// imported value is what `default` gives at that launch, and the mode and yaw
-// hotkeys are the game's own rows, which Defaults.ini never reaches.
+// imported value is what `default` gives at that launch.
 //
 // Inputs: the published build's first-run file (v0.1.0 and v0.2.0 shipped no
 // config and seeded none, so every player's file started as that one), no file,
@@ -311,6 +311,29 @@ std::vector<Hotkey> LegacyHotkeys(int yaw_mode_key) {
     return keys;
 }
 
+// What the import binds for the legacy set, by the owner's ruling of 2026-09-26
+// that every hotkey row follows the fleet's lists: the mode cycle's Ctrl+Shift+J,
+// bound in code, becomes Ctrl+Shift+G, and the yaw key's old default, Page Down
+// alone, becomes Page Down and Ctrl+Shift+H. A yaw key the player changed keeps
+// its one binding, and one the build refused stays unbound.
+std::vector<Hotkey> NormalisedHotkeys(int yaw_mode_key) {
+    constexpr int kVkPageDown = 0x22;
+    std::vector<Hotkey> keys = {
+        {kToggle, kVkEnd, kPlain},
+        {kCycleMode, kVkPageUp, kPlain},
+        {kToggle, 0x59, kCtrlShift},
+        {kCycleMode, 0x47, kCtrlShift},
+    };
+    if (yaw_mode_key == kVkPageDown) {
+        keys.push_back({kYawMode, kVkPageDown, kPlain});
+        keys.push_back({kYawMode, 0x48, kCtrlShift});
+    } else if (yaw_mode_key != kVkEnd && yaw_mode_key != kVkPageUp) {
+        keys.push_back({kYawMode, yaw_mode_key, kPlain});
+    }
+    std::sort(keys.begin(), keys.end());
+    return keys;
+}
+
 // Hand copied from v0.2.0:src/view_hook.cpp:79 (g_trackingEnabled starts true),
 // v0.2.0:src/view_hook.cpp:615 (the yaw mode from the config) and core 76304a2's
 // head_tracking_session.h:471 (the session starts in rotation and position,
@@ -561,8 +584,7 @@ bool LogSays(const std::vector<std::string>& log, const std::string& text) {
 
 // A Defaults.ini holding a value other than the built-in one on every global row
 // the table binds, so a migration that wrote `default` where the imported value
-// is not what `default` gives would read back differently over it. It also names
-// the two hotkey rows the game keeps, which it must not reach.
+// is not what `default` gives would read back differently over it.
 const char* const kSkewedDefaults =
     "[CameraUnlock]\r\nConfigFormat=1\r\n\r\n"
     "[Network]\r\nUdpPort=5252\r\n\r\n"
@@ -657,7 +679,8 @@ void ImportAgainstMigration(const std::vector<Input>& inputs) {
                   "the import reads every input, as the published build did");
         CHECK_MSG(imported.dropped.empty() && imported.pose_shaping.empty(),
                   "comparison 2: the import drops nothing and reads no pose shaping");
-        const Observed want = ObserveLegacy(read);
+        Observed want = ObserveLegacy(read);
+        want.hotkeys = NormalisedHotkeys(read.yaw_mode_key);
 
         // Over a Defaults.ini the owner creates with the built-in values.
         Scratch s;
