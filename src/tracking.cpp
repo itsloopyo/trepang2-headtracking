@@ -13,6 +13,8 @@
 #include "logging.h"
 #include "udp_link.h"
 
+#include "cameraunlock/tracking/tracking_mode.h"
+
 namespace t2_ht::tracking {
 
 namespace {
@@ -79,6 +81,10 @@ void Start(const Config& config) {
     g_receiver->Start(g_port);
 
     g_session = std::make_unique<Session>(*g_receiver);
+    // The table reads a pair that names no mode as its defaults, so every loaded
+    // pair decodes.
+    g_session->SetMode(
+        cameraunlock::DecodeTrackingMode(config.rotation_enabled, config.position_enabled).value());
     g_session->SetLocalSmoothing(config.local_smoothing);
     g_session->SetRemoteSmoothing(config.remote_smoothing);
 

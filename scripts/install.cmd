@@ -42,8 +42,9 @@ set "ASI_SUBDIR="
 :: whatever the user tuned. Listing an .ini in MOD_DLLS instead puts it through
 :: the unconditional copy and resets every key on every update.
 ::
-:: Empty: the mod writes HeadTracking.ini itself on first run, so there is
-:: nothing in the ZIP to seed. uninstall.cmd removes it via MOD_LEFTOVERS.
+:: Empty: the mod creates CameraUnlock.ini itself at first launch, importing
+:: HeadTracking.ini once where an earlier version left one, so nothing in the
+:: ZIP is a config. A seeded CameraUnlock.ini would stop that import.
 set "MOD_SEED_FILES="
 :: Version of the vendored Ultimate ASI Loader, recorded in the state file so
 :: the launcher can tell which loader build it is looking at. Leave empty to

@@ -3,39 +3,24 @@
 
 #include "mod_hotkeys.h"
 
-#include <algorithm>
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <vector>
-
-#include <windows.h>
 
 #include "logging.h"
 #include "view_hook.h"
 
-#include "cameraunlock/input/chord_hotkeys.h"
 #include "cameraunlock/input/hotkey_poller.h"
+#include "cameraunlock/input/key_binding_registration.h"
+#include "cameraunlock/input/key_bindings.h"
 
 namespace t2_ht::hotkeys {
 
 namespace {
 
 using cameraunlock::TrackingMode;
-using cameraunlock::input::ChordGuarded;
-using cameraunlock::input::NavGuarded;
-
-// Virtual-key codes. The nav-cluster defaults and the Ctrl+Shift chord cluster
-// (T/Y/U/G/H/J) are the fleet-wide bindings from AGENTS.md.
-//
-// Trepang2 fires its key bindings whether or not Ctrl and Shift are held
-// (Ctrl+Shift+R reloads in game), and it binds G to ThrowGrenade, H to
-// DualWield and T to ToggleFlashlight by default. So the fleet's Ctrl+Shift+G
-// would also throw a grenade and Ctrl+Shift+H would dual wield. The tracking
-// mode cycle takes the next free letter in the cluster, J, and the yaw-mode
-// toggle keeps only its nav-cluster key.
-constexpr int kVkEnd    = 0x23;
-constexpr int kVkPageUp = 0x21;
-constexpr int kVkY      = 0x59;
-constexpr int kVkJ      = 0x4A;
+using cameraunlock::input::KeyBinding;
 
 // How often the poller samples the keyboard, in milliseconds.
 constexpr unsigned kPollIntervalMs = 16;
@@ -43,24 +28,36 @@ constexpr unsigned kPollIntervalMs = 16;
 std::unique_ptr<cameraunlock::input::HotkeyPoller> g_poller;
 Session* g_session = nullptr;
 
+// End changes this session only; EnableOnStartup decides the next one.
 void ToggleTracking() {
     const bool enabled = !view_hook::TrackingEnabled();
     view_hook::SetTrackingEnabled(enabled);
     Log::Line("hotkey: tracking %s", enabled ? "ON" : "OFF");
 }
 
+// The session's mode is an atomic the render thread reads each frame, so the
+// cycle applies it here and then saves it.
 void CycleTrackingMode() {
     const TrackingMode mode = g_session->CycleMode();
     const char* name = mode == TrackingMode::RotationOnly ? "rotation only"
                      : mode == TrackingMode::PositionOnly ? "position only"
                                                           : "rotation and position";
     Log::Line("hotkey: tracking mode -> %s", name);
+    config::SaveTrackingMode(mode);
 }
 
 void ToggleYawMode() {
     const bool worldSpaceYaw = !view_hook::WorldSpaceYaw();
     view_hook::SetWorldSpaceYaw(worldSpaceYaw);
     Log::Line("hotkey: yaw mode %s", worldSpaceYaw ? "world" : "local");
+    config::SaveWorldSpaceYaw(worldSpaceYaw);
+}
+
+// The table's hotkey codec only lets through a list this parser reads.
+std::vector<KeyBinding> Bindings(const char* key, const std::string& list) {
+    const cameraunlock::input::KeyBindingsParseResult parsed = cameraunlock::input::ParseKeyBindings(list);
+    if (!parsed.ok()) throw std::logic_error(std::string(key) + "='" + list + "': " + parsed.error);
+    return parsed.bindings;
 }
 
 }  // namespace
@@ -69,33 +66,17 @@ void Register(const Config& config, Session& session) {
     g_session = &session;
     g_poller = std::make_unique<cameraunlock::input::HotkeyPoller>();
 
-    // Nav-cluster defaults. Suppressed when Ctrl+Shift is held so the chord
-    // path is the sole trigger.
-    //
-    // One action per key. The poller fires EVERY entry bound to a code, so a
-    // second action on a code already taken would run alongside the first on a
-    // single press - and the two keys the INI does let a player change sit
-    // directly under a comment naming End and Page Up, which are fixed. A
-    // collision is refused with a line rather than bound anyway.
-    std::vector<int> navKeys{kVkEnd, kVkPageUp};
-    const auto addNav = [&](int vk, const char* key, void (*action)()) {
-        if (std::find(navKeys.begin(), navKeys.end(), vk) != navKeys.end()) {
-            Log::Line("hotkey: [Hotkeys] %s=0x%02X is a key another action already has - "
-                      "%s is not bound to it this session", key, vk, key);
-            return;
-        }
-        navKeys.push_back(vk);
-        g_poller->AddHotkey(vk, NavGuarded(action));
-    };
-
-    g_poller->AddHotkey(kVkEnd,    NavGuarded([] { ToggleTracking(); }));
-    g_poller->AddHotkey(kVkPageUp, NavGuarded([] { CycleTrackingMode(); }));
-    addNav(config.yaw_mode_key, "YawMode", &ToggleYawMode);
-
-    // Ctrl+Shift chord alternatives. No chord for the yaw mode: see the key
-    // table above.
-    g_poller->AddHotkey(kVkY, ChordGuarded([] { ToggleTracking(); }));
-    g_poller->AddHotkey(kVkJ, ChordGuarded([] { CycleTrackingMode(); }));
+    // Each list holds every key that fires its action, the Ctrl+Shift chord
+    // included, and a key without modifiers stays silent while Ctrl and Shift
+    // are both held, so one press never fires two actions.
+    cameraunlock::input::RegisterKeyBindings(*g_poller, Bindings("ToggleKey", config.toggle_key),
+                                             [] { ToggleTracking(); });
+    cameraunlock::input::RegisterKeyBindings(
+        *g_poller, Bindings("CycleTrackingModeKey", config.cycle_tracking_mode_key), [] { CycleTrackingMode(); });
+    cameraunlock::input::RegisterKeyBindings(*g_poller, Bindings("YawModeKey", config.yaw_mode_key),
+                                             [] { ToggleYawMode(); });
+    Log::Line("hotkey: toggle=[%s] cycle tracking mode=[%s] yaw mode=[%s]", config.toggle_key.c_str(),
+              config.cycle_tracking_mode_key.c_str(), config.yaw_mode_key.c_str());
 
     g_poller->Start(kPollIntervalMs);
 }

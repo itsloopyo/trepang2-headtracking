@@ -22,6 +22,7 @@
 #include "view_hook.h"
 #include "window_centering.h"
 
+#include "cameraunlock/config/defaults_file.h"
 #include "cameraunlock/os/module_paths.h"
 
 namespace t2_ht {
@@ -71,23 +72,24 @@ bool CheckBuild() {
     return false;
 }
 
-// The INI, and the settings in it that have to be in force before the first
-// frame.
+// CameraUnlock.ini, and the settings in it that have to be in force before the
+// first frame.
 void LoadSettings() {
-    // Empty means the game directory has no ANSI form, and the INI layer is
-    // ANSI-only (GetPrivateProfile*A). A relative path would put the file
-    // wherever the game was started from and a best-fit narrowing would put it
-    // in somebody else's folder, so the settings stay at their defaults and the
-    // log says why.
-    const std::string exeDir = cameraunlock::os::HostExeDirectoryNarrow();
+    // Empty only when the exe's own path cannot be read. The config owner needs
+    // a full path, and a relative one would put the file wherever the game was
+    // started from, so the settings stay at their defaults and nothing is saved.
+    const std::wstring exeDir = cameraunlock::os::HostExeDirectory();
     if (exeDir.empty()) {
-        Log::Line("config: the game directory has no ANSI form on this system, so "
-                  "HeadTracking.ini cannot be read or written - using defaults");
-        return;
+        Log::Line("config: the game directory could not be read, so CameraUnlock.ini "
+                  "cannot be read or written - using defaults, and nothing is saved");
+        g_config = config::Table().defaults();
+    } else {
+        g_config = config::Load(exeDir, cameraunlock::config::DefaultsFile::PerUser());
     }
-    config::WriteDefaultIfMissing(exeDir);
-    config::Load(exeDir, g_config);
-    dev_console::SetEnabled(g_config.dev_commands, exeDir);
+    // The dev channel's command file is opened by an ANSI path; an empty one
+    // leaves the channel off.
+    dev_console::SetEnabled(g_config.dev_commands, cameraunlock::os::HostExeDirectoryNarrow());
+    view_hook::SetTrackingEnabled(g_config.enable_on_startup);
     view_hook::SetWorldSpaceYaw(g_config.world_space_yaw);
 }
 

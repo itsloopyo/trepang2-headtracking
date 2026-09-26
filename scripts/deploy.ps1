@@ -9,8 +9,8 @@
 .DESCRIPTION
     Unattended: no prompts, exits non-zero with a diagnostic on any failure.
     Every copy Find-AllGamePaths reports is written to; a supplied path wins.
-    The mod writes its own default HeadTracking.ini on first launch, so no
-    config file is copied.
+    The mod creates CameraUnlock.ini itself at first launch, importing an
+    existing HeadTracking.ini once, so no config file is copied.
 
 .PARAMETER GamePath
     Trepang2 install root. Omit to deploy to every detected install.

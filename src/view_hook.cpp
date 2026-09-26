@@ -84,6 +84,9 @@ std::atomic<std::uint64_t> g_hookCallCount{0};
 
 FrameClock g_frameClock;
 cameraunlock::camera::LeanClamp g_leanClamp;
+// CollisionEnabled, less a session whose CollisionChannel is not a trace
+// channel. Set once in Install, before the hook runs.
+bool g_leanClampOn = false;
 
 // The render caller runs more than once per engine frame (the scene view, and
 // every projection the HUD asks the local player for). All of them must see the
@@ -234,7 +237,7 @@ void LogHeartbeat(const FrameReport& r, std::uintptr_t retRva) {
               udpPort, r.HavePose ? 1 : 0, r.Applied.yaw, r.Applied.pitch, r.Applied.roll,
               r.Applied.x, r.Applied.y, r.Applied.z, r.RenderFov, r.BaseFov, r.ZoomFactor,
               camera_fov::AspectConstraint(), camera_fov::ReferenceAspect(), r.TanX, r.TanY,
-              !g_deps.config->collision_enabled ? "off"
+              !g_leanClampOn                    ? "off"
                   : lean_trace::Failed()        ? "unavailable"
                   : g_leanClamp.InContact()     ? "contact"
                                                 : "clear",
@@ -389,10 +392,10 @@ void ShapePose(ads_pose::Pose& pose, float entry, float zoomFactor) {
 }
 
 // As much of the wanted lean as the level leaves room for, swept from the CLEAN
-// eye. Passed through untouched when the clamp is switched off in the INI.
+// eye. Passed through untouched when the clamp is switched off in the config.
 FVector ClampLean(const FVector& cleanLocation, const FVector& wanted, float dt,
                   std::uintptr_t pawn) {
-    if (!g_deps.config->collision_enabled) return wanted;
+    if (!g_leanClampOn) return wanted;
     lean_trace::SetPawn(pawn);
     const cameraunlock::math::Vec3 from{static_cast<float>(cleanLocation.X),
                                         static_cast<float>(cleanLocation.Y),
@@ -617,6 +620,14 @@ bool Install(const Dependencies& deps) {
     aim_trace::SetTraceChannel(deps.config->aim_trace_channel);
     lean_trace::SetMargin(deps.config->collision_margin);
     lean_trace::SetChannel(deps.config->collision_channel);
+    // The channel is an ETraceTypeQuery written into the trace's frame as one
+    // byte, so a number past TraceTypeQuery32 would trace some other channel.
+    const int channel = deps.config->collision_channel;
+    g_leanClampOn = deps.config->collision_enabled && channel >= 0 && channel <= 31;
+    if (deps.config->collision_enabled && !g_leanClampOn) {
+        Log::Line("config: [Position] CollisionChannel=%d is not a trace channel (0 to 31) - "
+                  "the lean is not held off walls this session", channel);
+    }
     torch_aim::Configure(deps.config->light_follows_head, deps.config->light_multiplier);
     cameraunlock::camera::LeanClampSettings clamp;
     clamp.skin = 0.0f;  // lean_trace carries the margin along the surface normal

@@ -3,98 +3,211 @@
 
 #include "config.h"
 
-#include <cerrno>
-#include <cstdio>
+#include <cstddef>
+#include <cstring>
+#include <functional>
+#include <memory>
+#include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
+
+#include <windows.h>
 
 #include "legacy_config/legacy_config.h"
 #include "logging.h"
+
+#include "cameraunlock/config/hotkey_codec.h"
+#include "cameraunlock/config/value_codecs.h"
+#include "cameraunlock/input/key_bindings.h"
 
 namespace t2_ht::config {
 
 namespace {
 
-constexpr const char* kIniName = "HeadTracking.ini";
+namespace cfg = ::cameraunlock::config;
+using cfg::schema::Concept;
+using ::cameraunlock::input::FormatKeyBindings;
+using ::cameraunlock::input::KeyModifiers;
 
-std::string IniPath(const std::string& exe_dir) { return exe_dir + "\\" + kIniName; }
+constexpr const wchar_t* kIniName = L"CameraUnlock.ini";
+constexpr const wchar_t* kLegacyIniName = L"HeadTracking.ini";
 
-}  // namespace
+// data/games.json's display_name for trepang2.
+constexpr const char* kDisplayName = "Trepang2";
 
-void Load(const std::string& exe_dir, Config& out) {
+// ETraceTypeQuery holds TraceTypeQuery1 to TraceTypeQuery32.
+constexpr double kMaxTraceChannel = 31;
+
+constexpr KeyModifiers kChord = KeyModifiers::kCtrl | KeyModifiers::kShift;
+
+// The keys every build before the canonical format bound in code rather than in
+// the file.
+constexpr int kVkEnd = 0x23;
+constexpr int kVkPageUp = 0x21;
+constexpr int kVkY = 0x59;
+constexpr int kVkJ = 0x4A;
+
+std::unique_ptr<cfg::ConfigOwner<Config>> g_owner;
+
+void Save(const char* rows, const std::function<void(Config&)>& change) {
+    // No owner when the bootstrap could not read the game directory.
+    if (!g_owner) {
+        Log::Line("config: %s not saved: CameraUnlock.ini has no known folder this session", rows);
+        return;
+    }
+    const cfg::ConfigSaveResult result = g_owner->Save(change);
+    if (result.status != cfg::ConfigSaveStatus::Saved) {
+        Log::Line("config: %s %s: %s", rows, cfg::ConfigSaveStatusName(result.status), result.reason.c_str());
+    }
+    for (const std::string& line : result.log) Log::Line("config: %s", line.c_str());
+}
+
+cfg::ImportResult RunImport(const cfg::LegacyInput& input, Config& out) {
+    // The frozen reader takes the folder and names the file itself.
+    const std::string& path = input.ansi_path;
+    constexpr const char* kLegacySuffix = "\\HeadTracking.ini";
+    const std::size_t suffix_length = std::strlen(kLegacySuffix);
+    if (path.size() < suffix_length ||
+        _stricmp(path.c_str() + path.size() - suffix_length, kLegacySuffix) != 0) {
+        throw std::invalid_argument("the legacy import reads HeadTracking.ini only, not " + path);
+    }
+    // The test the frozen reader opens the file with: where it fails, the
+    // published build ran on its defaults.
+    const bool present = GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+
     legacy::Config read;
-    legacy::Load(exe_dir, read);
+    legacy::Load(path.substr(0, path.size() - suffix_length), read);
 
     out.udp_port = read.udp_port;
+    // Every earlier build started with head tracking on, in rotation and
+    // position, whatever the file said.
+    out.enable_on_startup = true;
+    out.rotation_enabled = true;
+    out.position_enabled = true;
+    // The reader refuses a value that is not a finite number in range, so every
+    // float here is finite and inside the concept's range.
     out.local_smoothing = read.local_smoothing;
     out.remote_smoothing = read.remote_smoothing;
-    out.yaw_mode_key = read.yaw_mode_key;
     out.world_space_yaw = read.world_space_yaw;
     out.collision_enabled = read.collision_enabled;
     out.collision_margin = read.collision_margin;
     out.collision_channel = read.collision_channel;
-    out.aim_trace_channel = read.aim_trace_channel;
     out.collision_release_smoothing = read.collision_release_smoothing;
+    out.aim_trace_channel = read.aim_trace_channel;
     out.light_follows_head = read.light_follows_head;
     out.light_multiplier = read.light_multiplier;
     out.dev_commands = read.dev_commands;
+
+    // End, Page Up and the Ctrl+Shift+Y and Ctrl+Shift+J chords were bound in
+    // code; only the yaw key was in the file, and the reader keeps it inside
+    // 0x01-0xFE. The build refused a yaw key that was End or Page Up, which
+    // already had an action, and bound the yaw toggle to nothing.
+    out.toggle_key = FormatKeyBindings({{KeyModifiers::kNone, kVkEnd}, {kChord, kVkY}});
+    out.cycle_tracking_mode_key = FormatKeyBindings({{KeyModifiers::kNone, kVkPageUp}, {kChord, kVkJ}});
+    const bool yaw_refused = read.yaw_mode_key == kVkEnd || read.yaw_mode_key == kVkPageUp;
+    out.yaw_mode_key = yaw_refused ? std::string() : FormatKeyBindings({{KeyModifiers::kNone, read.yaw_mode_key}});
+
+    return present ? cfg::ImportResult::Imported({}) : cfg::ImportResult::Absent({});
 }
 
-void WriteDefaultIfMissing(const std::string& exe_dir) {
-    const std::string path = IniPath(exe_dir);
-    const Config d{};
-    FILE* f = std::fopen(path.c_str(), "wbx");
-    if (!f) {
-        if (errno != EEXIST)
-            Log::Line("config: could not write %s (errno %d)", path.c_str(), errno);
-        return;
-    }
+}  // namespace
 
-    std::fprintf(f,
-        "; Trepang2 Head Tracking\r\n"
-        "; Delete this file to get the defaults back.\r\n"
-        "\r\n"
-        "[Network]\r\n"
-        "; UDP port the tracker sends to. 4242 is the OpenTrack default.\r\n"
-        "Port=%d\r\n"
-        "\r\n"
-        "[Tracking]\r\n"
-        "; Smoothing, 0.0 (none) to 1.0 (heaviest). LocalSmoothing applies to a\r\n"
-        "; tracker sending to 127.0.0.1; RemoteSmoothing to any other address,\r\n"
-        "; including this PC's own LAN address.\r\n"
-        "LocalSmoothing=%.2f\r\n"
-        "RemoteSmoothing=%.2f\r\n"
-        "\r\n"
-        "[General]\r\n"
-        "; 1 = head yaw turns about the world's up axis (horizon stays level).\r\n"
-        "; 0 = about the camera's own up axis. Page Down toggles this for the\r\n"
-        "; session.\r\n"
-        "WorldSpaceYaw=%d\r\n"
-        "\r\n"
-        "[Camera]\r\n"
-        "; Stop a positional lean from putting the view inside walls.\r\n"
-        "CollisionEnabled=%d\r\n"
-        "; Distance held off a surface, in centimetres (5 to 40).\r\n"
-        "CollisionMargin=%.1f\r\n"
-        "\r\n"
-        "[Light]\r\n"
-        "; 1 = the torch points where you are looking instead of where the\r\n"
-        "; weapon is aiming.\r\n"
-        "LightFollowsHead=%d\r\n"
-        "; How far the beam turns for a given head turn, 0 to 5. 1.5 leads the\r\n"
-        "; view, so the light reaches what you turned to look at; 1.0 matches\r\n"
-        "; the view; 0 leaves the beam on the aim.\r\n"
-        "LightMultiplier=%.2f\r\n"
-        "\r\n"
-        "[Hotkeys]\r\n"
-        "; Virtual-key codes. End (toggle tracking), Page Up (cycle tracking\r\n"
-        "; mode) and the Ctrl+Shift chords (Y, J) are fixed.\r\n"
-        "YawMode=0x%02X\r\n",
-        d.udp_port, d.local_smoothing, d.remote_smoothing,
-        d.world_space_yaw ? 1 : 0, d.collision_enabled ? 1 : 0,
-        d.collision_margin, d.light_follows_head ? 1 : 0, d.light_multiplier,
-        d.yaw_mode_key);
-    std::fclose(f);
-    Log::Line("config: wrote default %s", path.c_str());
+cfg::ConfigTable<Config> Table() {
+    cfg::ConfigTable<Config> table;
+    table.Concept<Concept::UdpPort>(&Config::udp_port)
+        .Concept<Concept::EnableOnStartup>(&Config::enable_on_startup)
+        .Concept<Concept::WorldSpaceYaw>(&Config::world_space_yaw)
+        .Writable()
+        .Concept<Concept::RotationEnabled>(&Config::rotation_enabled)
+        .Writable()
+        .Concept<Concept::LocalSmoothing>(&Config::local_smoothing)
+        .Concept<Concept::RemoteSmoothing>(&Config::remote_smoothing)
+        .Concept<Concept::PositionEnabled>(&Config::position_enabled)
+        .Writable()
+        .Concept<Concept::CollisionEnabled>(&Config::collision_enabled)
+        .Concept<Concept::CollisionMargin>(&Config::collision_margin)
+        .Comment("How far the view is held off a wall when you lean into it, in centimetres.\n"
+                 "Keep it above 3, the game's near clip distance.")
+        .Concept<Concept::CollisionChannel>(&Config::collision_channel)
+        .Engine()
+        .Concept<Concept::CollisionReleaseSmoothing>(&Config::collision_release_smoothing)
+        .Concept<Concept::ToggleKey>(&Config::toggle_key)
+        .Concept<Concept::CycleTrackingModeKey>(&Config::cycle_tracking_mode_key)
+        .PerGame()
+        .Concept<Concept::YawModeKey>(&Config::yaw_mode_key)
+        .PerGame()
+        .Concept<Concept::LightFollowsHead>(&Config::light_follows_head)
+        .Concept<Concept::LightMultiplier>(&Config::light_multiplier)
+        .Local("Aim", "AimTraceChannel", &Config::aim_trace_channel, cfg::IntCodec<int>(),
+               "Which of the game's collision channels the aim trace tests against, 0 to 31. The\n"
+               "trace finds where the shot lands, so the crosshair can sit on that point.")
+        .Range(0, kMaxTraceChannel)
+        .Engine()
+        .Local("Dev", "DevCommands", &Config::dev_commands, cfg::BoolCodec(),
+               "For development. true: run the commands in HeadTracking.devcmd beside the game's\n"
+               "executable.");
+    return table;
+}
+
+cfg::RenderHeader Header() {
+    cfg::RenderHeader header;
+    header.display_name = kDisplayName;
+    return header;
+}
+
+cfg::LegacyImport<Config> Import() {
+    cfg::LegacyImport<Config> import;
+    import.run = &RunImport;
+    // Every key the frozen reader takes a value from.
+    import.keys = {
+        {"Network", "Port"},
+        {"Tracking", "LocalSmoothing"},
+        {"Tracking", "RemoteSmoothing"},
+        {"General", "WorldSpaceYaw"},
+        {"Hotkeys", "YawMode"},
+        {"Camera", "CollisionEnabled"},
+        {"Camera", "CollisionMargin"},
+        {"Camera", "CollisionChannel"},
+        {"Camera", "CollisionReleaseSmoothing"},
+        {"Camera", "AimTraceChannel"},
+        {"Light", "LightFollowsHead"},
+        {"Light", "LightMultiplier"},
+        {"Dev", "DevCommands"},
+    };
+    return import;
+}
+
+cfg::ConfigOwnerOptions<Config> OwnerOptions(const std::wstring& exe_dir, cfg::DefaultsFile defaults) {
+    cfg::ConfigOwnerOptions<Config> options;
+    options.path = exe_dir + L"\\" + kIniName;
+    options.table = Table();
+    options.import = Import();
+    options.legacy_path = exe_dir + L"\\" + kLegacyIniName;
+    options.header = Header();
+    options.defaults = std::move(defaults);
+    return options;
+}
+
+Config Load(const std::wstring& exe_dir, cfg::DefaultsFile defaults) {
+    g_owner = std::make_unique<cfg::ConfigOwner<Config>>(OwnerOptions(exe_dir, std::move(defaults)));
+    const cfg::ConfigLoadResult<Config> result = g_owner->Load();
+    for (const std::string& line : result.log) Log::Line("config: %s", line.c_str());
+    if (!result.reason.empty()) Log::Line("config: %s", result.reason.c_str());
+    Log::Line("config: %s", cfg::ConfigLoadStatusName(result.status));
+    return result.config;
+}
+
+void SaveWorldSpaceYaw(bool world_space_yaw) {
+    Save("[General] WorldSpaceYaw", [world_space_yaw](Config& c) { c.world_space_yaw = world_space_yaw; });
+}
+
+void SaveTrackingMode(cameraunlock::TrackingMode mode) {
+    const cameraunlock::TrackingModeChannels channels = cameraunlock::EncodeTrackingMode(mode);
+    Save("[General] RotationEnabled and [Position] PositionEnabled", [channels](Config& c) {
+        c.rotation_enabled = channels.rotation_enabled;
+        c.position_enabled = channels.position_enabled;
+    });
 }
 
 }  // namespace t2_ht::config

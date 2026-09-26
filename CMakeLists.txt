@@ -228,10 +228,8 @@ if(T2_BUILD_TESTS)
     target_link_libraries(t2_kismet_trace_tests PRIVATE cameraunlock cameraunlock_unreal)
     add_test(NAME t2_kismet_trace_tests COMMAND t2_kismet_trace_tests)
 
-    # What HeadTracking.ini is allowed to put into the camera. Writes real INI
-    # files into a temp directory and reads them back through the same
-    # GetPrivateProfile* path the game uses, because that reader's parsing rules
-    # are the thing being pinned.
+    # The canonical config, the committed file and the toggles' saves. Also the
+    # renderer behind `pixi run render-config` (--render-config <path>).
     add_executable(t2_config_tests
         tests/config_tests.cpp
         src/config.cpp
@@ -243,6 +241,7 @@ if(T2_BUILD_TESTS)
         cameraunlock-core/cpp/include
     )
     target_link_libraries(t2_config_tests PRIVATE cameraunlock)
+    target_compile_definitions(t2_config_tests PRIVATE T2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME t2_config_tests COMMAND t2_config_tests)
 
     # The differential test for the config conversion. The oracle is the reader
@@ -269,6 +268,7 @@ if(T2_BUILD_TESTS)
 
     add_executable(t2_config_differential_tests
         tests/config_differential/differential_tests.cpp
+        src/config.cpp
         src/legacy_config/legacy_config.cpp
     )
     target_include_directories(t2_config_differential_tests PRIVATE
@@ -281,6 +281,13 @@ if(T2_BUILD_TESTS)
     target_compile_definitions(t2_config_differential_tests PRIVATE
         T2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME t2_config_differential_tests COMMAND t2_config_differential_tests)
+
+    # Core's canonical config lint over the committed file and every file the
+    # differential test migrated, which it writes beside itself under migrated\.
+    add_test(NAME t2_config_lint COMMAND node
+        ${CMAKE_SOURCE_DIR}/tests/config_differential/lint-migrated.mjs
+        $<TARGET_FILE_DIR:t2_config_differential_tests>/migrated)
+    set_tests_properties(t2_config_lint PROPERTIES DEPENDS t2_config_differential_tests)
 
     # The walk from an engine-supplied object index to its table slot, against a
     # synthetic object table in the test process's own memory - so the bounds

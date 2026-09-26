@@ -60,7 +60,7 @@ From the extracted ZIP:
 1. Copy `vendor\ultimate-asi-loader\dinput8.dll` into that folder and rename it to `winmm.dll`. That is an import both shipping executables already have, so it is the proxy name the loader has to use here.
 2. Copy `plugins\Trepang2HeadTracking.asi` into the same folder.
 
-`HeadTracking.ini` and `HeadTracking.log` are written to that folder on first launch.
+`CameraUnlock.ini` and `HeadTracking.log` are written to that folder on first launch.
 
 ## Setting Up OpenTrack
 
@@ -96,7 +96,7 @@ A phone on WiFi is a remote connection and gets `RemoteSmoothing`. So does a tra
 
 ## Controls
 
-Both columns do the same thing where both are listed. Use whichever your keyboard has.
+Both columns do the same thing where both are listed. Use whichever your keyboard has. The keys are set in `[Hotkeys]` in `CameraUnlock.ini` (see Configuration), where each action lists every key that fires it.
 
 | Action              | Nav-cluster | Chord          |
 |---------------------|-------------|----------------|
@@ -106,9 +106,11 @@ Both columns do the same thing where both are listed. Use whichever your keyboar
 
 Trepang2 runs its own key bindings whether or not Ctrl and Shift are held, and it binds `G` to throwing a grenade and `H` to dual wielding by default. The chords other mods in this series use for the tracking mode and the yaw mode (`Ctrl+Shift+G` and `Ctrl+Shift+H`) would do both at once here, so the tracking mode cycle uses `Ctrl+Shift+J` instead and the yaw mode toggle has no chord. Trepang2 fires its bindings with Ctrl and Shift held, so whatever you have on those two keys also happens while the chord is down.
 
-**Cycle tracking mode** steps through rotation and position, then rotation only, then position only.
+**Toggle tracking** turns head tracking on or off for this session only. Whether it is on when the game starts is `EnableOnStartup`.
 
-**Toggle yaw mode** switches which axis head yaw turns about. Horizon-locked is the default: yaw goes about the world up-axis, so looking at the floor and turning your head pans across it. Camera-local turns about the camera's own up-axis instead, which leans the horizon when the camera is pitched steeply. It applies for the session and is not written back to the file.
+**Cycle tracking mode** steps through rotation and position, then rotation only, then position only. The mode is saved to `CameraUnlock.ini` as you change it, and the game starts in it next time.
+
+**Toggle yaw mode** switches which axis head yaw turns about. Horizon-locked is the default: yaw goes about the world up-axis, so looking at the floor and turning your head pans across it. Camera-local turns about the camera's own up-axis instead, which leans the horizon when the camera is pitched steeply. The choice is saved to `CameraUnlock.ini` as you change it, and the game starts in it next time.
 
 ### Aiming down sights
 
@@ -118,46 +120,127 @@ Leaning eases out while the sights are up, because it would move your eye off th
 
 ## Configuration
 
-`HeadTracking.ini` sits next to the game exe (`CPPFPS\Binaries\Win64\` on Steam and GOG, `Content\CPPFPS\Binaries\WinGDK\` on Xbox Game Pass) and is written with the defaults on first launch. Delete it to get the defaults back.
+<!-- cameraunlock:config -->
+The mod reads its settings from `CameraUnlock.ini` in the game folder, at one of these paths depending on the store the game came from:
+
+- `CPPFPS\Binaries\Win64\CameraUnlock.ini`
+- `CPPFPS\Binaries\WinGDK\CameraUnlock.ini`
+
+It creates the file when it starts and finds none. Edit it with any text editor.
+
+A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+
+`Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
+
+When the mod starts and finds no `Defaults.ini`, it creates one holding the built-in values, unless Windows runs the game as a packaged app. The mod never changes `Defaults.ini` after that. Edit it with any text editor.
+
+Earlier versions of the mod kept these settings in `HeadTracking.ini`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `HeadTracking.ini` and writes them into `CameraUnlock.ini`. It never changes `HeadTracking.ini`, and does not read it again while `CameraUnlock.ini` exists.
+
+A setting that the defaults below set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it. `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
+
+Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
+
+- Reticle settings, and a key that toggled the reticle.
+- A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
+- The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
+
+An older version of the mod reads `HeadTracking.ini` and never reads `CameraUnlock.ini`, so a setting you change after updating is not in `HeadTracking.ini`.
+
+Deleting only `CameraUnlock.ini` makes the next start read `HeadTracking.ini` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults below. Every setting they set to `default` then follows `Defaults.ini`.
+
+The built-in value of each setting set to `default` below:
+
+- `UdpPort=4242`
+- `EnableOnStartup=true`
+- `WorldSpaceYaw=true`
+- `RotationEnabled=true`
+- `LocalSmoothing=0.0`
+- `RemoteSmoothing=0.15`
+- `PositionEnabled=true`
+- `CollisionEnabled=true`
+- `CollisionReleaseSmoothing=0.9`
+- `ToggleKey=End, Ctrl+Shift+Y`
+- `LightFollowsHead=true`
+- `LightMultiplier=1.5`
+
+With every setting at its default, the file reads:
 
 ```ini
-[Network]
-; UDP port the tracker sends to. 4242 is the OpenTrack default.
-Port=4242
+; Trepang2 head tracking settings.
+; Comments start with ; and go on their own line. Text after a value is part of the value.
+; Hotkeys are key names such as End, PageUp or Ctrl+Shift+Y. Separate several with commas; leave empty for none.
+; A setting set to default takes its value from Defaults.ini, which every head tracking mod
+; that keeps its settings in CameraUnlock.ini reads: %AppData%\CameraUnlock\Defaults.ini on
+; Windows, $XDG_CONFIG_HOME/CameraUnlock/Defaults.ini (normally ~/.config/CameraUnlock) on
+; Linux, under Wine and Proton too, and ~/Library/Application Support/CameraUnlock/Defaults.ini
+; on macOS. The log names the file it read. Write a value instead of default to change that
+; setting for this game only.
 
-[Tracking]
-; Smoothing, 0.0 (none) to 1.0 (heaviest). LocalSmoothing applies to a
-; tracker sending to 127.0.0.1; RemoteSmoothing to any other address,
-; including this PC's own LAN address.
-LocalSmoothing=0.00
-RemoteSmoothing=0.15
+[CameraUnlock]
+; Written by the mod. Leave this section in place.
+ConfigFormat=1
+
+[Network]
+; UDP port the mod receives tracker data on (OpenTrack protocol).
+UdpPort=default
 
 [General]
-; 1 = head yaw turns about the world's up axis (horizon stays level).
-; 0 = about the camera's own up axis. Page Down toggles this for the
-; session.
-WorldSpaceYaw=1
+; true: head tracking is on when the game starts. ToggleKey turns it on and off.
+EnableOnStartup=default
+; true: yaw turns around the world's up axis. false: around the camera's own up axis.
+WorldSpaceYaw=default
+; true: turning your head turns the view.
+; Tracking mode at startup, with PositionEnabled. The mode hotkey changes both.
+RotationEnabled=default
 
-[Camera]
-; Stop a positional lean from putting the view inside walls.
-CollisionEnabled=1
-; Distance held off a surface, in centimetres (5 to 40).
-CollisionMargin=10.0
+[Smoothing]
+; Smoothing when the tracker runs on this PC. 0 is the least, 1 the most.
+LocalSmoothing=default
+; Smoothing when the tracker is another device on the network, such as a phone.
+; 0 is the least, 1 the most.
+RemoteSmoothing=default
 
-[Light]
-; 1 = the torch points where you are looking instead of where the
-; weapon is aiming.
-LightFollowsHead=1
-; How far the beam turns for a given head turn, 0 to 5. 1.5 leads the
-; view, so the light reaches what you turned to look at; 1.0 matches
-; the view; 0 leaves the beam on the aim.
-LightMultiplier=1.50
+[Position]
+; true: moving your head moves the view.
+; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
+PositionEnabled=default
+; true: leaning stops at walls instead of moving the view through them.
+CollisionEnabled=default
+; How far the view is held off a wall when you lean into it, in centimetres.
+; Keep it above 3, the game's near clip distance.
+; CollisionMargin=10.0
+; Which of the game's collision channels the wall check tests against.
+; CollisionChannel=0
+; How gently the view eases back out after a wall stopped a lean.
+; 0 is the quickest, 1 the slowest.
+CollisionReleaseSmoothing=default
 
 [Hotkeys]
-; Virtual-key codes. End (toggle tracking), Page Up (cycle tracking
-; mode) and the Ctrl+Shift chords (Y, J) are fixed.
-YawMode=0x22
+; Turns head tracking on and off.
+ToggleKey=default
+; Changes the tracking mode: rotation and position, rotation only, position only.
+CycleTrackingModeKey=PageUp, Ctrl+Shift+J
+; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
+YawModeKey=PageDown
+
+[Light]
+; true: a light you carry points where you look instead of where you aim.
+LightFollowsHead=default
+; How far the light turns for each degree your head turns.
+; 1 matches the view, 0 keeps the light on your aim.
+LightMultiplier=default
+
+[Aim]
+; Which of the game's collision channels the aim trace tests against, 0 to 31. The
+; trace finds where the shot lands, so the crosshair can sit on that point.
+; AimTraceChannel=0
+
+[Dev]
+; For development. true: run the commands in HeadTracking.devcmd beside the game's
+; executable.
+DevCommands=false
 ```
+<!-- /cameraunlock:config -->
 
 ### Field of view
 
@@ -191,7 +274,7 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 
 - You are in a menu, the pause menu, a cutscene, the game's Kamera camera mode, dead, or loading. By design the view is left alone in all of those, and the log names which one.
 - Something else has the tracker port. `link: UDP 4242 waiting-for-port` is the mod waiting for it, and the `udp: Failed to bind UDP port 4242` line above it carries the reason Windows gave. Error 10048 is another program already on the port, usually a game left running - close it and the mod takes the port on its next retry, under a second later, without you restarting anything.
-- `link: UDP 4242 listening` with no `receiving` line after it means nothing is sending to the port. Check the tracker is running and pointed at this machine on the port in `HeadTracking.ini`.
+- `link: UDP 4242 listening` with no `receiving` line after it means nothing is sending to the port. Check the tracker is running and pointed at this machine on `UdpPort` in `CameraUnlock.ini`.
 - Check tracking is not switched off with `End` or `Ctrl+Shift+Y`.
 
 **Jittery or unstable tracking:**
@@ -205,7 +288,7 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 
 **Leaning into a wall stops short:**
 
-- By design. The lean is cut to the room the level leaves, holding the view `CollisionMargin` centimetres off the surface, and the log writes `lean-clamp: holding the view off geometry` when it does. `CollisionEnabled=0` turns that off, at the cost of seeing through walls when you lean into them.
+- By design. The lean is cut to the room the level leaves, holding the view `CollisionMargin` centimetres off the surface, and the log writes `lean-clamp: holding the view off geometry` when it does. `CollisionEnabled=false` turns that off, at the cost of seeing through walls when you lean into them.
 
 **The crosshair moves when I turn my head:**
 
@@ -222,11 +305,11 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 
 ## Updating
 
-Download the new release and run `install.cmd` again. `HeadTracking.ini` is left alone, so your settings carry over.
+Download the new release and run `install.cmd` again. `CameraUnlock.ini` is left alone, so your settings carry over. Updating from a version that kept its settings in `HeadTracking.ini` imports them into `CameraUnlock.ini` at the first start (see Configuration).
 
 ## Uninstalling
 
-Run `uninstall.cmd`. This removes the mod files and its ini and logs. The loader is only removed if the installer put it there; `uninstall.cmd /force` removes it anyway.
+Run `uninstall.cmd`. This removes the mod files and its logs, and leaves `CameraUnlock.ini` and `HeadTracking.ini` in place, so your settings survive a reinstall. The loader is only removed if the installer put it there; `uninstall.cmd /force` removes it anyway.
 
 ## Building from Source
 
