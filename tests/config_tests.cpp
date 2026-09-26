@@ -124,8 +124,8 @@ void TheCommittedFileIsTheFreshRender() {
 
 // Every global row holds `default`. The mode and yaw hotkeys are the game's own,
 // because Trepang2 binds G and H itself; the collision margin and channel are
-// every game's own, written as comments at their defaults; AimTraceChannel
-// and DevCommands are this mod's rows.
+// every game's own, the margin as a value and the channel, an Engine row,
+// commented at its default; AimTraceChannel and DevCommands are this mod's rows.
 void TheCommittedFileFollowsDefaultsIni() {
     const std::string committed = CommittedFile();
     for (const char* line :
@@ -133,7 +133,7 @@ void TheCommittedFileFollowsDefaultsIni() {
           "PositionEnabled=default", "LocalSmoothing=default", "RemoteSmoothing=default", "CollisionEnabled=default",
           "CollisionReleaseSmoothing=default", "ToggleKey=default", "LightFollowsHead=default",
           "LightMultiplier=default", "CycleTrackingModeKey=PageUp, Ctrl+Shift+J", "YawModeKey=PageDown",
-          "; CollisionMargin=10.0", "; CollisionChannel=0", "; AimTraceChannel=0", "DevCommands=false"}) {
+          "CollisionMargin=10.0", "; CollisionChannel=0", "; AimTraceChannel=0", "DevCommands=false"}) {
         CHECK_MSG(Holds(committed, line), line);
     }
 }
