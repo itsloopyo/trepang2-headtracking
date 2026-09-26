@@ -322,4 +322,17 @@ if(T2_BUILD_TESTS)
         tests
     )
     add_test(NAME t2_window_placement_tests COMMAND t2_window_placement_tests)
+
+    # Which bindings in two actions' key lists one press fires together, the rule
+    # the hotkey registration uses to keep a key to one action. Header-only over
+    # core's KeyBinding, so it needs no keyboard.
+    add_executable(t2_hotkey_overlap_tests
+        tests/hotkey_overlap_tests.cpp
+    )
+    target_include_directories(t2_hotkey_overlap_tests PRIVATE
+        src
+        tests
+        cameraunlock-core/cpp/include
+    )
+    add_test(NAME t2_hotkey_overlap_tests COMMAND t2_hotkey_overlap_tests)
 endif()

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "hotkey_overlap.h"
 #include "logging.h"
 #include "view_hook.h"
 
@@ -60,6 +61,38 @@ std::vector<KeyBinding> Bindings(const char* key, const std::string& list) {
     return parsed.bindings;
 }
 
+struct Claim {
+    KeyBinding binding;
+    const char* key;
+};
+
+// Registers the bindings of `list` that no earlier action's binding fires
+// together with, and records them in `claims`. The poller runs every action on a
+// key, so a clash (a player's YawModeKey=End, or a Defaults.ini ToggleKey
+// holding PageUp) would fire two actions on one press; the earlier action keeps
+// the key and the log says which binding was left out.
+void RegisterUnclaimed(std::vector<Claim>& claims, const char* key, const std::string& list, void (*action)()) {
+    std::vector<KeyBinding> kept;
+    for (const KeyBinding& binding : Bindings(key, list)) {
+        const Claim* clash = nullptr;
+        for (const Claim& claim : claims) {
+            if (hotkey_overlap::FireTogether(claim.binding, binding)) {
+                clash = &claim;
+                break;
+            }
+        }
+        if (clash) {
+            Log::Line("hotkey: %s's %s fires on the same press as %s's %s - it is not bound this session", key,
+                      cameraunlock::input::FormatKeyBindings({binding}).c_str(), clash->key,
+                      cameraunlock::input::FormatKeyBindings({clash->binding}).c_str());
+            continue;
+        }
+        kept.push_back(binding);
+    }
+    for (const KeyBinding& binding : kept) claims.push_back({binding, key});
+    cameraunlock::input::RegisterKeyBindings(*g_poller, kept, action);
+}
+
 }  // namespace
 
 void Register(const Config& config, Session& session) {
@@ -67,14 +100,13 @@ void Register(const Config& config, Session& session) {
     g_poller = std::make_unique<cameraunlock::input::HotkeyPoller>();
 
     // Each list holds every key that fires its action, the Ctrl+Shift chord
-    // included, and a key without modifiers stays silent while Ctrl and Shift
-    // are both held, so one press never fires two actions.
-    cameraunlock::input::RegisterKeyBindings(*g_poller, Bindings("ToggleKey", config.toggle_key),
-                                             [] { ToggleTracking(); });
-    cameraunlock::input::RegisterKeyBindings(
-        *g_poller, Bindings("CycleTrackingModeKey", config.cycle_tracking_mode_key), [] { CycleTrackingMode(); });
-    cameraunlock::input::RegisterKeyBindings(*g_poller, Bindings("YawModeKey", config.yaw_mode_key),
-                                             [] { ToggleYawMode(); });
+    // included. Within a list a key without modifiers stays silent while Ctrl and
+    // Shift are both held; across lists RegisterUnclaimed keeps one press to one
+    // action, in this order.
+    std::vector<Claim> claims;
+    RegisterUnclaimed(claims, "ToggleKey", config.toggle_key, &ToggleTracking);
+    RegisterUnclaimed(claims, "CycleTrackingModeKey", config.cycle_tracking_mode_key, &CycleTrackingMode);
+    RegisterUnclaimed(claims, "YawModeKey", config.yaw_mode_key, &ToggleYawMode);
     Log::Line("hotkey: toggle=[%s] cycle tracking mode=[%s] yaw mode=[%s]", config.toggle_key.c_str(),
               config.cycle_tracking_mode_key.c_str(), config.yaw_mode_key.c_str());
 

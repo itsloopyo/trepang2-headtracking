@@ -106,6 +106,8 @@ Both columns do the same thing where both are listed. Use whichever your keyboar
 
 Trepang2 runs its own key bindings whether or not Ctrl and Shift are held, and it binds `G` to throwing a grenade and `H` to dual wielding by default. The chords other mods in this series use for the tracking mode and the yaw mode (`Ctrl+Shift+G` and `Ctrl+Shift+H`) would do both at once here, so the tracking mode cycle uses `Ctrl+Shift+J` instead and the yaw mode toggle has no chord. Trepang2 fires its bindings with Ctrl and Shift held, so whatever you have on those two keys also happens while the chord is down.
 
+One press fires one action. If two actions' lists name a key that a single press would fire both of (`End` in two lists, or `End` in one and `Ctrl+End` in another), the key stays with the action listed first in `[Hotkeys]`, and the log's `hotkey:` line names the one it was left out of. That includes a key a list takes from `Defaults.ini`.
+
 **Toggle tracking** turns head tracking on or off for this session only. Whether it is on when the game starts is `EnableOnStartup`.
 
 **Cycle tracking mode** steps through rotation and position, then rotation only, then position only. The mode is saved to `CameraUnlock.ini` as you change it, and the game starts in it next time.
