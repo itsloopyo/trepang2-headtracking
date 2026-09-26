@@ -5,10 +5,19 @@
 
 #include <string>
 
-#include <cameraunlock/effects/head_follow_light.h>
-
-// HeadTracking.ini, next to the game exe.
-namespace t2_ht {
+// The pre-canonical HeadTracking.ini reader, frozen. It reads a file the way the
+// last build before the canonical config format did, so a player's old file is
+// converted as that build read it. Never edit anything in this folder: the
+// differential test in tests/config_differential/ pins every file here by hash.
+//
+// Frozen from src/config.h and src/config.cpp at 9d691b8, the commit before the
+// canonical config conversion, with three changes: it fills this frozen copy of
+// that commit's Config and its defaults instead of the runtime type, it writes
+// nothing, and it lives in namespace t2_ht::legacy. The light multiplier's
+// default and upper bound are written as the literals cameraunlock-core's
+// kDefaultLightMultiplier and kMaxLightMultiplier held then (1.5 and 5), so a
+// later change to core cannot move what an old file means.
+namespace t2_ht::legacy {
 
 struct Config {
     // UDP port the tracker sends to. 4242 is the OpenTrack default.
@@ -38,22 +47,14 @@ struct Config {
     // aiming, and how far it leads the view. 1.0 matches the view, 0 pins the
     // beam to the aim.
     bool light_follows_head = true;
-    float light_multiplier = cameraunlock::effects::kDefaultLightMultiplier;
+    float light_multiplier = 1.5f;
 
     // Dev only.
     bool dev_commands = false;
 };
 
-}  // namespace t2_ht
-
-namespace t2_ht::config {
-
-// Fill `out` from the INI through the frozen reader in legacy_config/: absent
-// keys keep their defaults, out-of-range values fall back to the default and say
-// so in the log.
+// Fill `out` from the INI; absent keys keep their defaults, out-of-range values
+// fall back to the default and say so in the log.
 void Load(const std::string& exe_dir, Config& out);
 
-// Write a commented default INI unless one already exists.
-void WriteDefaultIfMissing(const std::string& exe_dir);
-
-}  // namespace t2_ht::config
+}  // namespace t2_ht::legacy

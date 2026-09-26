@@ -7,6 +7,8 @@
 
 #include <cameraunlock/effects/head_follow_light.h>
 
+#include "ads.h"
+
 // HeadTracking.ini, next to the game exe.
 namespace t2_ht {
 
@@ -19,6 +21,8 @@ struct Config {
     float local_smoothing = 0.0f;
     float remote_smoothing = 0.15f;
 
+    AdsMode ads_mode = kDefaultAdsMode;
+    int ads_mode_key = 0x2D;  // VK_INSERT
     int yaw_mode_key = 0x22;  // VK_NEXT (Page Down)
 
     // True: head yaw turns about the world up axis (horizon stays level).
@@ -48,12 +52,14 @@ struct Config {
 
 namespace t2_ht::config {
 
-// Fill `out` from the INI through the frozen reader in legacy_config/: absent
-// keys keep their defaults, out-of-range values fall back to the default and say
-// so in the log.
+// Fill `out` from the INI; absent keys keep their defaults, out-of-range values
+// fall back to the default and say so in the log.
 void Load(const std::string& exe_dir, Config& out);
 
 // Write a commented default INI unless one already exists.
 void WriteDefaultIfMissing(const std::string& exe_dir);
+
+// Persist the ADS mode, leaving every other key alone.
+void SaveAdsMode(AdsMode mode);
 
 }  // namespace t2_ht::config

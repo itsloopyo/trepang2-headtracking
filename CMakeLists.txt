@@ -55,6 +55,7 @@ set(MOD_SOURCES
     src/ue_reflect.cpp
     src/ue_vm.cpp
     src/config.cpp
+    src/legacy_config/legacy_config.cpp
     src/crash_report.cpp
     src/builds/build_registry.cpp
     src/builds/steam_offsets.cpp
@@ -234,6 +235,7 @@ if(T2_BUILD_TESTS)
     add_executable(t2_config_tests
         tests/config_tests.cpp
         src/config.cpp
+        src/legacy_config/legacy_config.cpp
     )
     target_include_directories(t2_config_tests PRIVATE
         src
@@ -242,6 +244,43 @@ if(T2_BUILD_TESTS)
     )
     target_link_libraries(t2_config_tests PRIVATE cameraunlock)
     add_test(NAME t2_config_tests COMMAND t2_config_tests)
+
+    # The differential test for the config conversion. The oracle is the reader
+    # of the newest published build (v0.2.0), compiled from its own sources with
+    # the mod's and core's namespaces renamed, so it links beside today's code and
+    # nothing in it can resolve to a symbol of the mod under test. Its include
+    # roots put the published build's files ahead of core's current headers.
+    add_library(t2_config_oracle STATIC
+        tests/config_differential/oracle_api.cpp
+        tests/config_differential/oracle/src/config.cpp
+        cameraunlock-core/cpp/src/config/ini_reader.cpp
+        cameraunlock-core/cpp/src/config/value_guards.cpp
+        cameraunlock-core/cpp/src/logging/file_log.cpp
+    )
+    target_include_directories(t2_config_oracle PRIVATE
+        tests/config_differential/oracle/src
+        tests/config_differential/oracle/core
+        cameraunlock-core/cpp/include
+    )
+    target_compile_definitions(t2_config_oracle PRIVATE
+        t2_ht=t2_ht_oracle
+        cameraunlock=t2_oracle_core
+    )
+
+    add_executable(t2_config_differential_tests
+        tests/config_differential/differential_tests.cpp
+        src/legacy_config/legacy_config.cpp
+    )
+    target_include_directories(t2_config_differential_tests PRIVATE
+        src
+        tests
+        tests/config_differential
+        cameraunlock-core/cpp/include
+    )
+    target_link_libraries(t2_config_differential_tests PRIVATE t2_config_oracle cameraunlock bcrypt)
+    target_compile_definitions(t2_config_differential_tests PRIVATE
+        T2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME t2_config_differential_tests COMMAND t2_config_differential_tests)
 
     # The walk from an engine-supplied object index to its table slot, against a
     # synthetic object table in the test process's own memory - so the bounds

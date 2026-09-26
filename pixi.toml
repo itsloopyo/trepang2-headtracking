@@ -19,6 +19,8 @@ setup = { cmd = """
 build = { cmd = "cmake --build build --config Release", depends-on = ["setup"] }
 build-debug = { cmd = "cmake --build build --config Debug", depends-on = ["setup"] }
 
+# The behaviour locks and the config differential test, which holds the frozen
+# HeadTracking.ini reader to the newest published build's.
 test = { cmd = "ctest --test-dir build -C Release --output-on-failure", depends-on = ["build"] }
 
 clean = { cmd = """
@@ -36,8 +38,9 @@ update-deps = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scrip
 
 # Package the installer ZIP. One ZIP only: the .asi deploys next to the game
 # exe, where no mod manager can put it, so this mod is installer-only and has
-# no Nexus ZIP.
-package = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build"] }
+# no Nexus ZIP. Depends on test, so no ZIP is built from a tree whose behaviour
+# locks or config differential test fail.
+package = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test"] }
 
 # Full release workflow: stamp version, changelog, package, commit, tag, push.
 # Unattended - `pixi run release minor` is the authorization, there is no prompt.
