@@ -27,7 +27,7 @@ Download [Lopari](https://lopari.app), choose **Trepang2**, and click
 
 ### Standalone Installer
 
-1. Download the installer ZIP from the [Releases](https://github.com/itsloopyo/trepang2-headtracking/releases) page. There is no release yet; until there is, build from source.
+1. Download the installer ZIP from the [Releases](https://github.com/itsloopyo/trepang2-headtracking/releases) page.
 2. Extract it anywhere.
 3. Double-click `install.cmd`.
 4. Configure OpenTrack to output UDP to `127.0.0.1:4242`.
