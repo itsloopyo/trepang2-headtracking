@@ -19,7 +19,6 @@
 
 #include "cameraunlock/config/hotkey_codec.h"
 #include "cameraunlock/config/value_codecs.h"
-#include "cameraunlock/input/key_bindings.h"
 
 namespace t2_ht::config {
 
@@ -28,8 +27,6 @@ namespace {
 namespace cfg = ::cameraunlock::config;
 using cfg::schema::Concept;
 using cfg::schema::ConceptTraits;
-using ::cameraunlock::input::FormatKeyBindings;
-using ::cameraunlock::input::KeyModifiers;
 
 constexpr const wchar_t* kIniName = L"CameraUnlock.ini";
 constexpr const wchar_t* kLegacyIniName = L"HeadTracking.ini";
@@ -40,14 +37,10 @@ constexpr const char* kDisplayName = "Trepang2";
 // ETraceTypeQuery holds TraceTypeQuery1 to TraceTypeQuery32.
 constexpr double kMaxTraceChannel = 31;
 
-constexpr KeyModifiers kChord = KeyModifiers::kCtrl | KeyModifiers::kShift;
-
-// The toggle keys every build before the canonical format bound in code rather
-// than in the file, and the yaw key's default there.
+// The keys every build before the canonical format bound in code to the toggle
+// and the mode cycle, which it refused as the yaw key.
 constexpr int kVkEnd = 0x23;
 constexpr int kVkPageUp = 0x21;
-constexpr int kVkY = 0x59;
-constexpr int kVkPageDown = 0x22;
 
 std::unique_ptr<cfg::ConfigOwner<Config>> g_owner;
 
@@ -80,45 +73,59 @@ cfg::ImportResult RunImport(const cfg::LegacyInput& input, Config& out) {
     legacy::Config read;
     legacy::Load(path.substr(0, path.size() - suffix_length), read);
 
+    // The shipped values: every field the frozen reader leaves alone keeps these.
+    const legacy::Config shipped;
+    cfg::LegacyFollowsDefaultsIni follows;
+    std::vector<cfg::DroppedValue> dropped;
+
     out.udp_port = read.udp_port;
+    follows.Setting(Concept::UdpPort, read.udp_port, shipped.udp_port);
     // Every earlier build started with head tracking on, in rotation and
     // position, whatever the file said.
     out.enable_on_startup = true;
+    follows.NotInLegacy(Concept::EnableOnStartup);
     out.rotation_enabled = true;
     out.position_enabled = true;
+    follows.TrackingMode(true);
     // The reader refuses a value that is not a finite number in range, so every
     // float here is finite and inside the concept's range.
     out.local_smoothing = read.local_smoothing;
+    follows.Setting(Concept::LocalSmoothing, read.local_smoothing, shipped.local_smoothing);
     out.remote_smoothing = read.remote_smoothing;
+    follows.Setting(Concept::RemoteSmoothing, read.remote_smoothing, shipped.remote_smoothing);
     out.world_space_yaw = read.world_space_yaw;
+    follows.Setting(Concept::WorldSpaceYaw, read.world_space_yaw, shipped.world_space_yaw);
     out.collision_enabled = read.collision_enabled;
+    follows.Setting(Concept::CollisionEnabled, read.collision_enabled, shipped.collision_enabled);
     out.collision_margin = read.collision_margin;
     out.collision_channel = read.collision_channel;
     out.collision_release_smoothing = read.collision_release_smoothing;
+    follows.Setting(Concept::CollisionReleaseSmoothing, read.collision_release_smoothing,
+                    shipped.collision_release_smoothing);
     out.aim_trace_channel = read.aim_trace_channel;
     out.light_follows_head = read.light_follows_head;
+    follows.Setting(Concept::LightFollowsHead, read.light_follows_head, shipped.light_follows_head);
     out.light_multiplier = read.light_multiplier;
+    follows.Setting(Concept::LightMultiplier, read.light_multiplier, shipped.light_multiplier);
     out.dev_commands = read.dev_commands;
 
-    // End, Page Up and the Ctrl+Shift+Y and Ctrl+Shift+J chords were bound in
-    // code, so no player chose them; only the yaw key was in the file, and the
-    // reader keeps it inside 0x01-0xFE. The owner ruled (2026-09-26) that the
-    // mode and yaw keys take the fleet's lists: the mode cycle's J chord and the
-    // yaw key's default, Page Down with no chord, become the fleet default, and a
-    // yaw key the player changed stays theirs. The build refused a yaw key that
-    // was End or Page Up, which already had an action, and bound the yaw toggle
-    // to nothing.
-    out.toggle_key = FormatKeyBindings({{KeyModifiers::kNone, kVkEnd}, {kChord, kVkY}});
-    out.cycle_tracking_mode_key = ConceptTraits<Concept::CycleTrackingModeKey>::kCanonicalDefault;
-    if (read.yaw_mode_key == kVkPageDown) {
-        out.yaw_mode_key = ConceptTraits<Concept::YawModeKey>::kCanonicalDefault;
-    } else if (read.yaw_mode_key == kVkEnd || read.yaw_mode_key == kVkPageUp) {
+    // End and the Ctrl+Shift+Y chord were bound in code, and are the fleet's
+    // toggle list, so no player chose them. Page Up and Ctrl+Shift+J, also bound
+    // in code, are this game's mode list. Only the yaw key was in the file, and
+    // the reader keeps it inside 0x01-0xFE. The build refused a yaw key that was
+    // End or Page Up, which already had an action, and bound the yaw toggle to
+    // nothing.
+    out.toggle_key = ConceptTraits<Concept::ToggleKey>::kCanonicalDefault;
+    follows.NotInLegacy(Concept::ToggleKey);
+    out.cycle_tracking_mode_key = Config{}.cycle_tracking_mode_key;
+    if (read.yaw_mode_key == kVkEnd || read.yaw_mode_key == kVkPageUp) {
         out.yaw_mode_key.clear();
     } else {
-        out.yaw_mode_key = FormatKeyBindings({{KeyModifiers::kNone, read.yaw_mode_key}});
+        out.yaw_mode_key = cfg::LegacyVirtualKeyToBindings(read.yaw_mode_key, "Hotkeys", "YawMode", dropped);
     }
 
-    return present ? cfg::ImportResult::Imported({}) : cfg::ImportResult::Absent({});
+    return present ? cfg::ImportResult::Imported(std::move(dropped), {}, follows.Concepts())
+                   : cfg::ImportResult::Absent(std::move(dropped), {}, follows.Concepts());
 }
 
 }  // namespace
@@ -144,7 +151,9 @@ cfg::ConfigTable<Config> Table() {
         .Concept<Concept::CollisionReleaseSmoothing>(&Config::collision_release_smoothing)
         .Concept<Concept::ToggleKey>(&Config::toggle_key)
         .Concept<Concept::CycleTrackingModeKey>(&Config::cycle_tracking_mode_key)
+        .PerGame()
         .Concept<Concept::YawModeKey>(&Config::yaw_mode_key)
+        .PerGame()
         .Concept<Concept::LightFollowsHead>(&Config::light_follows_head)
         .Concept<Concept::LightMultiplier>(&Config::light_multiplier)
         .Local("Aim", "AimTraceChannel", &Config::aim_trace_channel, cfg::IntCodec<int>(),

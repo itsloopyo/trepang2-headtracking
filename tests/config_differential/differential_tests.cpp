@@ -18,17 +18,21 @@
 // the file is read. Each one is listed below with its commit.
 //
 // Comparison 2, import against migration, is the proof for the conversion. It
-// allows one difference, the owner's ruling of 2026-09-26 that the mode and yaw
-// hotkeys take the fleet's lists (NormalisedHotkeys): the file carried no pose
-// shaping and no reticle setting, the reader lets through no value that is not
-// finite, the yaw key it keeps is inside 0x01-0xFE, and no default moved, so the
-// no-file input may not differ either.
+// allows no difference: the file carried no pose shaping and no reticle setting,
+// the reader lets through no value that is not finite, the yaw key it keeps is
+// inside 0x01-0xFE and never a Ctrl, Shift or Alt key alone (so N1 and N3 never
+// apply), the mode and yaw keys keep the lists the build bound (this game's
+// per_game rows), and no default moved, so the no-file input may not differ
+// either.
 //
 // Each input migrates three times: over a Defaults.ini the owner creates with the
 // built-in values, from a read-only HeadTracking.ini, and over a Defaults.ini
-// that differs from the built-in value on every global row. All three give the
-// settings the import read, since the migration writes `default` only where the
-// imported value is what `default` gives at that launch.
+// that differs from the built-in value on every global row. The first two give
+// the settings the import read. Over the third, a setting the player never
+// changed from the old build's value follows Defaults.ini (owner rule of
+// 2026-09-26, LegacyFollowsDefaultsIni) and only a changed one stays the
+// import's (OverDefaults). Over the built-in values every row the player never
+// changed is written `default` and every changed one a value.
 //
 // Inputs: the published build's first-run file (v0.1.0 and v0.2.0 shipped no
 // config and seeded none, so every player's file started as that one), no file,
@@ -311,29 +315,6 @@ std::vector<Hotkey> LegacyHotkeys(int yaw_mode_key) {
     return keys;
 }
 
-// What the import binds for the legacy set, by the owner's ruling of 2026-09-26
-// that every hotkey row follows the fleet's lists: the mode cycle's Ctrl+Shift+J,
-// bound in code, becomes Ctrl+Shift+G, and the yaw key's old default, Page Down
-// alone, becomes Page Down and Ctrl+Shift+H. A yaw key the player changed keeps
-// its one binding, and one the build refused stays unbound.
-std::vector<Hotkey> NormalisedHotkeys(int yaw_mode_key) {
-    constexpr int kVkPageDown = 0x22;
-    std::vector<Hotkey> keys = {
-        {kToggle, kVkEnd, kPlain},
-        {kCycleMode, kVkPageUp, kPlain},
-        {kToggle, 0x59, kCtrlShift},
-        {kCycleMode, 0x47, kCtrlShift},
-    };
-    if (yaw_mode_key == kVkPageDown) {
-        keys.push_back({kYawMode, kVkPageDown, kPlain});
-        keys.push_back({kYawMode, 0x48, kCtrlShift});
-    } else if (yaw_mode_key != kVkEnd && yaw_mode_key != kVkPageUp) {
-        keys.push_back({kYawMode, yaw_mode_key, kPlain});
-    }
-    std::sort(keys.begin(), keys.end());
-    return keys;
-}
-
 // Hand copied from v0.2.0:src/view_hook.cpp:79 (g_trackingEnabled starts true),
 // v0.2.0:src/view_hook.cpp:615 (the yaw mode from the config) and core 76304a2's
 // head_tracking_session.h:471 (the session starts in rotation and position,
@@ -444,6 +425,9 @@ std::vector<Input> Inputs() {
         {"v0.2.0 first-run file", true, FirstRunFile()},
         {"no file", false, {}},
         {"empty file", true, {}},
+        // The reader refuses these and keeps Page Down, so N3 has nothing to drop.
+        {"yaw key on Ctrl", true, "[Hotkeys]\r\nYawMode=0x11\r\n"},
+        {"yaw key on Right Alt", true, "[Hotkeys]\r\nYawMode=0xA5\r\n"},
     };
     for (testing::IniMutation& m : testing::GenerateIniMutations(FirstRunFile(), CorpusReads(), CorpusKeys())) {
         inputs.push_back({"corpus: " + m.name, true, std::move(m.bytes)});
@@ -594,6 +578,86 @@ const char* const kSkewedDefaults =
     "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\n\r\n"
     "[Light]\r\nLightFollowsHead=false\r\nLightMultiplier=3.5\r\n";
 
+// What the session runs on under kSkewedDefaults with no legacy setting at all.
+Observed SkewedDefaults() {
+    Observed o;
+    o.udp_port = 5252;
+    o.start_enabled = false;
+    o.start_world_yaw = false;
+    o.start_mode = static_cast<int>(TrackingMode::PositionOnly);
+    o.local_smoothing = 0.5f;
+    o.remote_smoothing = 0.5f;
+    o.collision_enabled = false;
+    o.collision_release_smoothing = 0.25f;
+    o.light_follows_head = false;
+    o.light_multiplier = 3.5f;
+    // F8. The mode and yaw rows are this game's own and never read Defaults.ini.
+    o.hotkeys = {{kToggle, 0x77, kPlain}};
+    return o;
+}
+
+// Each global row the table takes from Defaults.ini, and whether the player
+// changed it from the old build's value. The start state and the toggle key had
+// no setting in the legacy file, so no player changed them.
+struct GlobalRow {
+    const char* key;
+    bool changed;
+};
+
+std::vector<GlobalRow> GlobalRows(const t2_ht::legacy::Config& read) {
+    const t2_ht::legacy::Config shipped;
+    return {
+        {"UdpPort", read.udp_port != shipped.udp_port},
+        {"EnableOnStartup", false},
+        {"WorldSpaceYaw", read.world_space_yaw != shipped.world_space_yaw},
+        {"RotationEnabled", false},
+        {"PositionEnabled", false},
+        {"LocalSmoothing", Bits(read.local_smoothing) != Bits(shipped.local_smoothing)},
+        {"RemoteSmoothing", Bits(read.remote_smoothing) != Bits(shipped.remote_smoothing)},
+        {"CollisionEnabled", read.collision_enabled != shipped.collision_enabled},
+        {"CollisionReleaseSmoothing",
+         Bits(read.collision_release_smoothing) != Bits(shipped.collision_release_smoothing)},
+        {"ToggleKey", false},
+        {"LightFollowsHead", read.light_follows_head != shipped.light_follows_head},
+        {"LightMultiplier", Bits(read.light_multiplier) != Bits(shipped.light_multiplier)},
+    };
+}
+
+bool Changed(const std::vector<GlobalRow>& rows, const char* key) {
+    for (const GlobalRow& row : rows) {
+        if (std::strcmp(row.key, key) == 0) return row.changed;
+    }
+    throw std::logic_error(std::string("no global row ") + key);
+}
+
+// The settings a migration over `defaults` runs on: the import's where the player
+// changed the setting, Defaults.ini's where not.
+Observed OverDefaults(const Observed& imported, const std::vector<GlobalRow>& rows, const Observed& defaults) {
+    Observed o = imported;
+    if (!Changed(rows, "UdpPort")) o.udp_port = defaults.udp_port;
+    if (!Changed(rows, "EnableOnStartup")) o.start_enabled = defaults.start_enabled;
+    if (!Changed(rows, "WorldSpaceYaw")) o.start_world_yaw = defaults.start_world_yaw;
+    if (!Changed(rows, "RotationEnabled")) o.start_mode = defaults.start_mode;
+    if (!Changed(rows, "LocalSmoothing")) o.local_smoothing = defaults.local_smoothing;
+    if (!Changed(rows, "RemoteSmoothing")) o.remote_smoothing = defaults.remote_smoothing;
+    if (!Changed(rows, "CollisionEnabled")) o.collision_enabled = defaults.collision_enabled;
+    if (!Changed(rows, "CollisionReleaseSmoothing")) {
+        o.collision_release_smoothing = defaults.collision_release_smoothing;
+    }
+    if (!Changed(rows, "LightFollowsHead")) o.light_follows_head = defaults.light_follows_head;
+    if (!Changed(rows, "LightMultiplier")) o.light_multiplier = defaults.light_multiplier;
+    if (!Changed(rows, "ToggleKey")) {
+        o.hotkeys.erase(std::remove_if(o.hotkeys.begin(), o.hotkeys.end(),
+                                       [](const Hotkey& h) { return std::get<0>(h) == kToggle; }),
+                        o.hotkeys.end());
+        for (const Hotkey& h : defaults.hotkeys) {
+            if (std::get<0>(h) == kToggle) o.hotkeys.push_back(h);
+        }
+        std::sort(o.hotkeys.begin(), o.hotkeys.end());
+    }
+    return o;
+}
+
 // The folder beside this executable the migrated files are written to, for
 // lint-migrated.mjs, which CTest runs after this test.
 fs::path MigratedFolder() {
@@ -679,8 +743,8 @@ void ImportAgainstMigration(const std::vector<Input>& inputs) {
                   "the import reads every input, as the published build did");
         CHECK_MSG(imported.dropped.empty() && imported.pose_shaping.empty(),
                   "comparison 2: the import drops nothing and reads no pose shaping");
-        Observed want = ObserveLegacy(read);
-        want.hotkeys = NormalisedHotkeys(read.yaw_mode_key);
+        const Observed want = ObserveLegacy(read);
+        const std::vector<GlobalRow> rows = GlobalRows(read);
 
         // Over a Defaults.ini the owner creates with the built-in values.
         Scratch s;
@@ -692,10 +756,24 @@ void ImportAgainstMigration(const std::vector<Input>& inputs) {
             CHECK_MSG(diff.empty(), "comparison 2: the migration runs as the import read");
 
             // Over the built-in values the table's own defaults stand for Defaults.ini.
+            const std::string bytes = ReadFileBytes(s.canonical().string());
             t2_ht::Config reread;
-            CanonicalDiagnostics(ReadFileBytes(s.canonical().string()), reread);
+            CanonicalDiagnostics(bytes, reread);
             CHECK_MSG(Differences(ObserveCanonical(reread), ObserveCanonical(*migrated)).empty(),
                       "CameraUnlock.ini reads back as the settings the session runs on");
+
+            // A row the player never changed is written `default`, and one the
+            // player changed holds a value, since the old build's values are
+            // the built-in ones.
+            for (const GlobalRow& row : rows) {
+                const bool holds_default =
+                    bytes.find("\r\n" + std::string(row.key) + "=default\r\n") != std::string::npos;
+                if (holds_default == row.changed) {
+                    std::printf("  %s: %s %s\n", name, row.key, row.changed ? "changed, written default" : "untouched, written as a value");
+                }
+                CHECK_MSG(holds_default != row.changed,
+                          "an untouched setting migrates as default, a changed one as a value");
+            }
 
             // Fresh equals upgrade: the published build's first-run file, and no
             // file at all, both end as the committed file.
@@ -718,8 +796,8 @@ void ImportAgainstMigration(const std::vector<Input>& inputs) {
         }
 
         // Over a Defaults.ini that differs everywhere. With no legacy file the
-        // settings are Defaults.ini's own, so only an input with a file is held
-        // to the import there.
+        // settings are Defaults.ini's own and the owner creates rather than
+        // migrates, so only an input with a file is held here.
         if (input.present) {
             Scratch skewed;
             skewed.Write(input.bytes);
@@ -727,9 +805,12 @@ void ImportAgainstMigration(const std::vector<Input>& inputs) {
             const std::optional<t2_ht::Config> c =
                 Migrate(input, skewed, input.name + " (skewed Defaults.ini)", migrated_files);
             const std::vector<std::string> diff =
-                c ? Differences(want, ObserveCanonical(*c)) : std::vector<std::string>{"the load"};
+                c ? Differences(OverDefaults(want, rows, SkewedDefaults()), ObserveCanonical(*c))
+                  : std::vector<std::string>{"the load"};
             for (const std::string& d : diff) std::printf("  comparison 2, %s (skewed Defaults.ini): %s\n", name, d.c_str());
-            CHECK_MSG(diff.empty(), "the migration gives the import's settings over a Defaults.ini that differs everywhere");
+            CHECK_MSG(diff.empty(),
+                      "over a Defaults.ini that differs everywhere, untouched settings follow it and changed ones "
+                      "stay the import's");
         }
         ++compared;
     }

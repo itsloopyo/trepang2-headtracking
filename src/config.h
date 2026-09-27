@@ -49,10 +49,11 @@ struct Config {
 
     std::string toggle_key =
         cameraunlock::config::schema::ConceptTraits<cameraunlock::config::schema::Concept::ToggleKey>::kCanonicalDefault;
-    std::string cycle_tracking_mode_key = cameraunlock::config::schema::ConceptTraits<
-        cameraunlock::config::schema::Concept::CycleTrackingModeKey>::kCanonicalDefault;
-    std::string yaw_mode_key =
-        cameraunlock::config::schema::ConceptTraits<cameraunlock::config::schema::Concept::YawModeKey>::kCanonicalDefault;
+    // Trepang2 binds its own actions with Ctrl and Shift held, so the fleet's
+    // Ctrl+Shift+G (grenade) and Ctrl+Shift+H (dual wield) chords would fire them.
+    // Both rows are PerGame, approved in core's data/config-format.json.
+    std::string cycle_tracking_mode_key = "PageUp, Ctrl+Shift+J";
+    std::string yaw_mode_key = "PageDown";
 
     // Dev only.
     bool dev_commands = false;

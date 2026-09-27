@@ -122,16 +122,17 @@ void TheCommittedFileIsTheFreshRender() {
     CHECK_MSG(Rendered() == CommittedFile(), "CameraUnlock.ini is the table's fresh render; run pixi run render-config");
 }
 
-// Every global row holds `default`. The collision margin and channel are every
-// game's own, the margin as a value and the channel, an Engine row,
-// commented at its default; AimTraceChannel and DevCommands are this mod's rows.
+// Every global row holds `default` but the mode and yaw hotkeys, which this game
+// keeps for itself (per_game). The collision margin and channel are every game's
+// own, the margin as a value and the channel, an Engine row, commented at its
+// default; AimTraceChannel and DevCommands are this mod's rows.
 void TheCommittedFileFollowsDefaultsIni() {
     const std::string committed = CommittedFile();
     for (const char* line :
          {"UdpPort=default", "EnableOnStartup=default", "WorldSpaceYaw=default", "RotationEnabled=default",
           "PositionEnabled=default", "LocalSmoothing=default", "RemoteSmoothing=default", "CollisionEnabled=default",
-          "CollisionReleaseSmoothing=default", "ToggleKey=default", "CycleTrackingModeKey=default",
-          "YawModeKey=default", "LightFollowsHead=default", "LightMultiplier=default",
+          "CollisionReleaseSmoothing=default", "ToggleKey=default",
+          "CycleTrackingModeKey=PageUp, Ctrl+Shift+J", "YawModeKey=PageDown", "LightFollowsHead=default", "LightMultiplier=default",
           "CollisionMargin=10.0", "; CollisionChannel=0", "; AimTraceChannel=0", "DevCommands=false"}) {
         CHECK_MSG(Holds(committed, line), line);
     }
@@ -145,8 +146,8 @@ void FirstLaunchCreatesTheCommittedFile() {
               "the first launch creates CameraUnlock.ini and nothing else beside the exe");
     CHECK_MSG(fs::exists(s.defaults()), "the first launch creates Defaults.ini where none exists");
     CHECK(loaded.toggle_key == "End, Ctrl+Shift+Y");
-    CHECK(loaded.cycle_tracking_mode_key == "PageUp, Ctrl+Shift+G");
-    CHECK(loaded.yaw_mode_key == "PageDown, Ctrl+Shift+H");
+    CHECK(loaded.cycle_tracking_mode_key == "PageUp, Ctrl+Shift+J");
+    CHECK(loaded.yaw_mode_key == "PageDown");
     CHECK(loaded.enable_on_startup);
     CHECK(loaded.world_space_yaw);
     CHECK(loaded.rotation_enabled && loaded.position_enabled);
@@ -155,8 +156,8 @@ void FirstLaunchCreatesTheCommittedFile() {
     CHECK(loaded.light_multiplier == 1.5f);
 }
 
-// A value in Defaults.ini reaches every row holding `default`, the hotkeys
-// included.
+// A value in Defaults.ini reaches every row holding `default`, the toggle key
+// included, and not the mode and yaw keys, which this game keeps for itself.
 void ADefaultRowFollowsDefaultsIni() {
     Scratch s("follows");
     s.Load();
@@ -164,8 +165,8 @@ void ADefaultRowFollowsDefaultsIni() {
                                  "CycleTrackingModeKey=F9\r\nYawModeKey=F10\r\n");
     const t2_ht::Config c = s.Load();
     CHECK(c.toggle_key == "F8");
-    CHECK(c.cycle_tracking_mode_key == "F9");
-    CHECK(c.yaw_mode_key == "F10");
+    CHECK(c.cycle_tracking_mode_key == "PageUp, Ctrl+Shift+J");
+    CHECK(c.yaw_mode_key == "PageDown");
 }
 
 void TheYawToggleSavesItsLineAndNothingElse() {
@@ -233,31 +234,52 @@ void TheLegacyFileIsImportedAndLeftAsItWas() {
 }
 
 // The yaw key was the one hotkey in the old file, and one the player changed is
-// carried as it was. The keys bound in code before follow Defaults.ini: the
-// toggle's list was already the fleet's, and the mode cycle's Ctrl+Shift+J
-// becomes the fleet's Ctrl+Shift+G.
+// carried as it was. The toggle, bound in code before to the fleet's list,
+// follows Defaults.ini; the mode cycle keeps the list it was bound to in code.
 void AnOldYawKeyIsCarried() {
     Scratch s("yaw_key");
     WriteFileBytes(s.legacy(), "[View]\r\nAdsMode=tracked\r\n[Hotkeys]\r\nYawMode=0x2E\r\nAdsMode=0x2D\r\n");
     const t2_ht::Config c = s.Load();
     CHECK(c.yaw_mode_key == "Delete");
     CHECK(c.toggle_key == "End, Ctrl+Shift+Y");
-    CHECK(c.cycle_tracking_mode_key == "PageUp, Ctrl+Shift+G");
+    CHECK(c.cycle_tracking_mode_key == "PageUp, Ctrl+Shift+J");
     const std::string migrated = ReadFileBytes(s.ini());
     CHECK(Holds(migrated, "YawModeKey=Delete"));
     CHECK(Holds(migrated, "ToggleKey=default"));
-    CHECK(Holds(migrated, "CycleTrackingModeKey=default"));
+    CHECK(Holds(migrated, "CycleTrackingModeKey=PageUp, Ctrl+Shift+J"));
     CHECK_MSG(migrated.find("AdsMode") == std::string::npos, "the retired ADS keys are not carried");
 }
 
-// The yaw key's old default, Page Down with no chord, becomes the fleet's list and
-// follows Defaults.ini.
-void TheOldDefaultYawKeyFollowsDefaultsIni() {
+// The yaw key's old default, Page Down with no chord, is this game's own.
+void TheOldDefaultYawKeyStaysPageDown() {
     Scratch s("yaw_default");
     WriteFileBytes(s.legacy(), "[Hotkeys]\r\nYawMode=0x22\r\n");
     const t2_ht::Config c = s.Load();
-    CHECK(c.yaw_mode_key == "PageDown, Ctrl+Shift+H");
-    CHECK(Holds(ReadFileBytes(s.ini()), "YawModeKey=default"));
+    CHECK(c.yaw_mode_key == "PageDown");
+    CHECK(Holds(ReadFileBytes(s.ini()), "YawModeKey=PageDown"));
+}
+
+// The old build refused a yaw key on Ctrl alone and bound Page Down, so the import
+// carries Page Down.
+void AnOldYawKeyOnCtrlStaysPageDown() {
+    Scratch s("yaw_ctrl");
+    WriteFileBytes(s.legacy(), "[Hotkeys]\r\nYawMode=0x11\r\n");
+    const t2_ht::Config c = s.Load();
+    CHECK(c.yaw_mode_key == "PageDown");
+    CHECK(Holds(ReadFileBytes(s.ini()), "YawModeKey=PageDown"));
+}
+
+// A setting the player left at the old build's value follows Defaults.ini, and
+// one the player changed stays theirs.
+void AnUntouchedSettingFollowsDefaultsIni() {
+    Scratch s("untouched");
+    WriteFileBytes(s.legacy(), "[Network]\r\nPort=4242\r\n[Tracking]\r\nRemoteSmoothing=0.40\r\n");
+    s.Load();
+    const std::string migrated = ReadFileBytes(s.ini());
+    CHECK(Holds(migrated, "UdpPort=default"));
+    CHECK(Holds(migrated, "RemoteSmoothing=0.4"));
+    CHECK(Holds(migrated, "RotationEnabled=default"));
+    CHECK(Holds(migrated, "PositionEnabled=default"));
 }
 
 // The old build refused a yaw key another action already had, and bound the yaw
@@ -287,7 +309,9 @@ int main(int argc, char** argv) {
     TheModeCycleSavesThePair();
     TheLegacyFileIsImportedAndLeftAsItWas();
     AnOldYawKeyIsCarried();
-    TheOldDefaultYawKeyFollowsDefaultsIni();
+    TheOldDefaultYawKeyStaysPageDown();
+    AnOldYawKeyOnCtrlStaysPageDown();
+    AnUntouchedSettingFollowsDefaultsIni();
     AnOldYawKeyOnEndStaysUnbound();
 
     return t2_test::Report();
