@@ -101,10 +101,10 @@ Both columns do the same thing where both are listed. Use whichever your keyboar
 | Action              | Nav-cluster | Chord          |
 |---------------------|-------------|----------------|
 | Toggle tracking     | `End`       | `Ctrl+Shift+Y` |
-| Cycle tracking mode | `Page Up`   | `Ctrl+Shift+G` |
-| Toggle yaw mode     | `Page Down` | `Ctrl+Shift+H` |
+| Cycle tracking mode | `Page Up`   | `Ctrl+Shift+J` |
+| Toggle yaw mode     | `Page Down` |                |
 
-Trepang2 runs its own key bindings whether or not Ctrl and Shift are held, and it binds `G` to throwing a grenade and `H` to dual wielding by default. With those bindings, `Ctrl+Shift+G` also throws a grenade and `Ctrl+Shift+H` also dual wields, and whatever you have on `Y`, `G` or `H` in the game also happens while you press that chord. To use other keys, change `CycleTrackingModeKey` and `YawModeKey` in `CameraUnlock.ini`.
+Trepang2 runs its own key bindings whether or not Ctrl and Shift are held. It binds `G` to throwing a grenade and `H` to dual wielding by default, so this mod does not use the `Ctrl+Shift+G` and `Ctrl+Shift+H` chords other head tracking mods use: the mode cycle takes `Ctrl+Shift+J`, and yaw mode has no chord. `CycleTrackingModeKey` and `YawModeKey` in `CameraUnlock.ini` hold these keys for this game and do not follow `Defaults.ini`. Whatever you have bound to `Y` or `J` in the game also happens while you press that chord; to use other keys, change the lists in `CameraUnlock.ini`.
 
 One press fires one action. If two actions' lists name a key that a single press would fire both of (`End` in two lists, or `End` in one and `Ctrl+End` in another), the key stays with the action listed first in `[Hotkeys]`, and the log's `hotkey:` line names the one it was left out of. That includes a key a list takes from `Defaults.ini`.
 
@@ -130,25 +130,11 @@ The mod reads its settings from `CameraUnlock.ini` in the game folder, at one of
 
 It creates the file when it starts and finds none. Edit it with any text editor.
 
-A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
 
 `Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
 
 When the mod starts and finds no `Defaults.ini`, it creates one holding the built-in values, unless Windows runs the game as a packaged app. The mod never changes `Defaults.ini` after that. Edit it with any text editor.
-
-Earlier versions of the mod kept these settings in `HeadTracking.ini`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `HeadTracking.ini` and writes them into `CameraUnlock.ini`. It never changes `HeadTracking.ini`, and does not read it again while `CameraUnlock.ini` exists.
-
-A setting that the defaults below set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it. `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
-
-Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
-
-- Reticle settings, and a key that toggled the reticle.
-- A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
-- The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
-
-An older version of the mod reads `HeadTracking.ini` and never reads `CameraUnlock.ini`, so a setting you change after updating is not in `HeadTracking.ini`.
-
-Deleting only `CameraUnlock.ini` makes the next start read `HeadTracking.ini` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults below. Every setting they set to `default` then follows `Defaults.ini`.
 
 The built-in value of each setting set to `default` below:
 
@@ -162,8 +148,6 @@ The built-in value of each setting set to `default` below:
 - `CollisionEnabled=true`
 - `CollisionReleaseSmoothing=0.9`
 - `ToggleKey=End, Ctrl+Shift+Y`
-- `CycleTrackingModeKey=PageUp, Ctrl+Shift+G`
-- `YawModeKey=PageDown, Ctrl+Shift+H`
 - `LightFollowsHead=true`
 - `LightMultiplier=1.5`
 
@@ -223,9 +207,9 @@ CollisionReleaseSmoothing=default
 ; Turns head tracking on and off.
 ToggleKey=default
 ; Changes the tracking mode: rotation and position, rotation only, position only.
-CycleTrackingModeKey=default
+CycleTrackingModeKey=PageUp, Ctrl+Shift+J
 ; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
-YawModeKey=default
+YawModeKey=PageDown
 
 [Light]
 ; true: a light you carry points where you look instead of where you aim.
@@ -288,7 +272,7 @@ A windowed game is moved once to the centre of the desktop work area on the moni
 
 **Yaw feels wrong when looking up or down at extreme angles:**
 
-- Press `Page Down` or `Ctrl+Shift+H` to switch yaw mode. Horizon-locked, the default, turns head yaw about the world's up axis, so the horizon stays level however steeply the camera is pitched. Camera-local turns it about the camera's own up axis instead, which tilts the horizon as you turn while looking up or down. Press it again to go back.
+- Press `Page Down` to switch yaw mode. Horizon-locked, the default, turns head yaw about the world's up axis, so the horizon stays level however steeply the camera is pitched. Camera-local turns it about the camera's own up axis instead, which tilts the horizon as you turn while looking up or down. Press it again to go back.
 
 **Leaning into a wall stops short:**
 

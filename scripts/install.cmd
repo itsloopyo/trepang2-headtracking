@@ -51,7 +51,7 @@ set "MOD_SEED_FILES="
 :: omit the field. Bump alongside vendor/ via `pixi run update-deps`.
 set "ASI_LOADER_VERSION=9.7.4"
 :: Post-install help text. `&echo ` starts each further line.
-set "MOD_CONTROLS=Controls:&echo   End       - Toggle head tracking on/off&echo   Page Up   - Cycle tracking mode (full / rotation only / position only)&echo   Page Down - Toggle yaw mode (world-locked / camera-local)&echo.&echo Keyboards without a nav cluster:&echo   Ctrl+Shift+Y - Toggle head tracking&echo   Ctrl+Shift+G - Cycle tracking mode&echo   Ctrl+Shift+H - Toggle yaw mode"
+set "MOD_CONTROLS=Controls:&echo   End       - Toggle head tracking on/off&echo   Page Up   - Cycle tracking mode (full / rotation only / position only)&echo   Page Down - Toggle yaw mode (world-locked / camera-local)&echo.&echo Keyboards without a nav cluster:&echo   Ctrl+Shift+Y - Toggle head tracking&echo   Ctrl+Shift+J - Cycle tracking mode"
 :: --- END CONFIG BLOCK ---
 
 :: Pin delayed expansion off before `%*` is expanded on the `call` below.
