@@ -288,6 +288,7 @@ if(T2_BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/tests/config_differential/lint-migrated.mjs
         $<TARGET_FILE_DIR:t2_config_differential_tests>/migrated)
     set_tests_properties(t2_config_lint PROPERTIES DEPENDS t2_config_differential_tests)
+    set_tests_properties(t2_config_differential_tests t2_config_lint PROPERTIES LABELS differential)
 
     # The walk from an engine-supplied object index to its table slot, against a
     # synthetic object table in the test process's own memory - so the bounds
