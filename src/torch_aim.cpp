@@ -30,10 +30,12 @@ ue_call::Function g_setRelativeRotation;
 bool g_haveSetter = false;
 
 // The torch resolved against the pawn it hangs off. A respawn or a level load
-// builds a new pawn and a new component, so the pointer is re-read whenever the
-// pawn changes rather than cached for the session.
+// builds a new pawn and a new component, and the new pawn can land at the old
+// one's address, so the pawn's Flashlight pointer is re-read every frame and a
+// different component is resolved again rather than written through.
 std::uintptr_t g_pawn = 0;
 std::uintptr_t g_torch = 0;
+std::size_t g_flashlightOffset = 0;
 
 // Whether the beam currently carries a rotation of ours, and which one. The
 // game never writes this field itself - it ships the component at identity and
@@ -74,6 +76,7 @@ void ResolveTorch(const player_rig::Snapshot& rig) {
     }
     std::uintptr_t component = 0;
     if (!ue::SafeReadPtr(rig.Pawn + flashlight.Offset, component) || !component) return;
+    g_flashlightOffset = flashlight.Offset;
 
     ue_reflect::FieldInfo attachParent;
     std::uintptr_t parent = 0;
@@ -105,7 +108,10 @@ bool Ready(const player_rig::Snapshot& rig) {
             {{"NewRotation", sizeof(ue4::FRotator)}});
         if (!g_haveSetter) return false;
     }
-    if (rig.Pawn != g_pawn) ResolveTorch(rig);
+    std::uintptr_t component = 0;
+    if (rig.Pawn != g_pawn ||
+        (g_torch && (!ue::SafeReadPtr(rig.Pawn + g_flashlightOffset, component) || component != g_torch)))
+        ResolveTorch(rig);
     return g_torch != 0;
 }
 

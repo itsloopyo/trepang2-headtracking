@@ -15,6 +15,7 @@
 namespace t2_ht::dev_console {
 
 void SetEnabled(bool enabled, const std::string& exeDir);
+bool Enabled();
 
 // Keep the channel polled from UObject::ProcessEvent while no camera is asking
 // for a view point (title screen, loading). Needs the reflection runtime, so it

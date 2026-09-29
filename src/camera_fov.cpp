@@ -36,10 +36,26 @@ ue_reflect::FieldInfo g_playerField;
 std::uintptr_t g_localPlayerClass = 0;
 ue_reflect::FieldInfo g_constraintField;
 
+ue_vm::ResolveRetry g_instanceRetry;
 ue_vm::ResolveRetry g_settingsRetry;
 std::uintptr_t g_gameInstance = 0;
+bool g_haveSettingOffsets = false;
 std::size_t g_saveObjOffset = 0;
 std::size_t g_fovOffset = 0;
+
+// GameInstanceBP_C, the one live instance. The walk covers the whole object
+// table, so it runs only while no instance is known; everything after it is a
+// property lookup on the instance found.
+std::uintptr_t FindGameInstance() {
+    std::uintptr_t found = 0;
+    ue::ForEachUObject([&](std::uintptr_t obj) {
+        if (ue::ClassName(obj) != "GameInstanceBP_C") return false;
+        if (ue::ObjectName(obj).rfind("Default__", 0) == 0) return false;
+        found = obj;
+        return true;
+    });
+    return found;
+}
 
 }  // namespace
 
@@ -100,33 +116,33 @@ void RefreshAspectConstraint(std::uintptr_t controller) {
 // The save object is re-read every call: applying settings can replace it.
 float BaseFov() {
     if (!g_gameInstance) {
+        if (!g_instanceRetry.Due()) return 0.0f;
+        g_gameInstance = FindGameInstance();
+        if (!g_gameInstance) return 0.0f;
+        g_haveSettingOffsets = false;
+    }
+    // Retried on its own gate against the instance already found: the save
+    // object is not built on the first frames, and a missing member is a lookup
+    // on its class, not a reason to walk the object table again.
+    if (!g_haveSettingOffsets) {
         if (!g_settingsRetry.Due()) return 0.0f;
-        std::uintptr_t found = 0;
-        ue::ForEachUObject([&](std::uintptr_t obj) {
-            if (ue::ClassName(obj) != "GameInstanceBP_C") return false;
-            if (ue::ObjectName(obj).rfind("Default__", 0) == 0) return false;
-            found = obj;
-            return true;
-        });
-        if (!found) return 0.0f;
         ue_reflect::FieldInfo save, video, fov;
         std::uintptr_t saveObj = 0;
-        if (!ue_reflect::FindPropertyInChain(ue_call::ClassOf(found), "SettingsSaveObj", save) ||
-            save.Size != sizeof(std::uintptr_t) || !ue::SafeReadPtr(found + save.Offset, saveObj) || !saveObj ||
-            !ue_reflect::FindPropertyInChain(ue_call::ClassOf(saveObj), "VideoSettings", video) ||
+        if (!ue_reflect::FindPropertyInChain(ue_call::ClassOf(g_gameInstance), "SettingsSaveObj", save) ||
+            save.Size != sizeof(std::uintptr_t) || !ue::SafeReadPtr(g_gameInstance + save.Offset, saveObj) ||
+            !saveObj || !ue_reflect::FindPropertyInChain(ue_call::ClassOf(saveObj), "VideoSettings", video) ||
             !ue_reflect::FindPropertyByPrefix(ue_reflect::StructOf(video), "FOV_", fov) ||
             fov.TypeName != "FloatProperty")
             return 0.0f;
-        g_gameInstance = found;
         g_saveObjOffset = save.Offset;
         g_fovOffset = video.Offset + fov.Offset;
+        g_haveSettingOffsets = true;
         Log::Line("fov: game setting VideoSettings.%s at SettingsSaveObj+0x%zx", fov.Name.c_str(), g_fovOffset);
     }
-    // Only a pointer that no longer reads drops the resolution. Re-resolving
-    // walks the whole object table, on the render caller, so a save object not
-    // built yet or a value that is not an angle has to be this frame's answer
-    // rather than a reason to go looking again: both conditions last as long as
-    // whatever caused them, and would re-scan on every retry tick throughout.
+    // Only a pointer that no longer reads drops the instance. A save object not
+    // built yet or a value that is not an angle is this frame's answer rather
+    // than a reason to go looking again: both last as long as whatever caused
+    // them, and would re-resolve on every retry tick throughout.
     std::uintptr_t saveObj = 0;
     if (!ue::SafeReadPtr(g_gameInstance + g_saveObjOffset, saveObj)) {
         g_gameInstance = 0;

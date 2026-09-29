@@ -285,22 +285,37 @@ std::uintptr_t CurrentHud(std::uintptr_t pawn) {
     return hud;
 }
 
-bool PanelsAlive() {
+// Every panel the last search bound is still the object it was. An unbound
+// panel has nothing to lose.
+bool BoundPanelsAlive() {
     for (const Panel& panel : g_panels)
-        if (!StillAlive(panel.Widget, panel.Index)) return false;
+        if (panel.Widget && !StillAlive(panel.Widget, panel.Index)) return false;
     return true;
+}
+
+bool AnyBound() {
+    for (const Panel& panel : g_panels)
+        if (panel.Widget) return true;
+    return false;
 }
 
 // The panels inside THIS pawn's HUD. The front end and a previous level can
 // leave other HUD instances in the object table, and moving one of those
 // changes nothing on screen while looking exactly like success.
+//
+// The search walks the whole object table, so it runs once per HUD and again
+// only when a panel it bound has died. A panel the HUD does not have is logged
+// and left out while the rest still follow the aim. Requiring all of them put
+// that walk on the render thread four times a second for as long as one was
+// missing, and moved nothing.
 bool Bind(std::uintptr_t pawn) {
     const std::uintptr_t hud = CurrentHud(pawn);
     if (!hud) return false;
-    if (hud == g_hud && PanelsAlive()) return true;
-    g_hud = hud;
-    ResetPanels();
+    if (hud == g_hud && BoundPanelsAlive()) return AnyBound();
     if (!g_findRetry.Due()) return false;
+    const bool rebind = hud == g_hud;
+    ResetPanels();
+    g_hud = hud;
     ue::ForEachUObject([&](std::uintptr_t obj) {
         const std::string cls = ue::ClassName(obj);
         if (cls != "CanvasPanel" && cls != "VerticalBox" && cls != "Overlay") return false;
@@ -315,26 +330,26 @@ bool Bind(std::uintptr_t pawn) {
         }
         return false;
     });
-    for (Panel& panel : g_panels) {
-        if (panel.Widget) continue;
-        Log::Line("reticle: %s not found in %s (0x%llx)", panel.Name, ue::ClassName(hud).c_str(),
-                  static_cast<unsigned long long>(hud));
-        ResetPanels();
-        return false;
+    for (const Panel& panel : g_panels) {
+        if (panel.Widget)
+            Log::Line("reticle: %s %s (0x%llx) in %s", rebind ? "rebound" : "bound", panel.Name,
+                      static_cast<unsigned long long>(panel.Widget), ue::ClassName(hud).c_str());
+        else
+            Log::Line("reticle: %s not found in %s (0x%llx) - it stays where the game lays it out",
+                      panel.Name, ue::ClassName(hud).c_str(), static_cast<unsigned long long>(hud));
     }
-    for (const Panel& panel : g_panels)
-        Log::Line("reticle: bound %s (0x%llx) in %s", panel.Name, static_cast<unsigned long long>(panel.Widget),
-                  ue::ClassName(hud).c_str());
-    return true;
+    return AnyBound();
 }
 
 bool Move(float x, float y) {
     for (Panel& panel : g_panels) {
-        if (x == panel.LastX && y == panel.LastY) continue;
+        if (!panel.Widget || (x == panel.LastX && y == panel.LastY)) continue;
         ue_call::Frame frame(g_setTranslation);
         frame.Set(0, ue4::FVector2D{x, y});
         if (!frame.Call(panel.Widget)) {
+            // Forget the HUD as well, so the next Bind searches it again.
             ResetPanels();
+            g_hud = 0;
             return false;
         }
         panel.LastX = x;
@@ -420,8 +435,9 @@ void ReadBackPanels(std::uintptr_t controller, bool settled, float askedX, float
         for (Panel& panel : g_panels) panel.HaveLayout = false;
     }
     for (Panel& panel : g_panels)
-        LogPanelPaint(panel, ReadDrawn(controller, panel.Widget), askedX, askedY, pixelX, pixelY,
-                      viewport, dpi);
+        if (panel.Widget)
+            LogPanelPaint(panel, ReadDrawn(controller, panel.Widget), askedX, askedY, pixelX,
+                          pixelY, viewport, dpi);
 }
 
 }  // namespace

@@ -479,14 +479,15 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
     // transform, and GetShootLocation / GetShootAngles hand exactly that to the
     // weapon, so the ray starts there and runs along that component's forward -
     // not along the drawn view, which carries the camera manager's shakes on
-    // top. Done in every gameplay frame, not only tracked ones, so the shot log
-    // compares like with like.
+    // top. Only the mark reads it, so it runs on the frames the pose applies,
+    // plus every gameplay frame while the dev channel is on so the shot log
+    // compares tracked and untracked frames like with like.
     const FVector aimOrigin = rig.FirstPersonCamera.Valid ? rig.FirstPersonCamera.Position : cleanLocation;
     const FVector aimDir = rig.FirstPersonCamera.Valid
         ? rig.FirstPersonCamera.Forward
         : ue::QuatRotateVec(cleanQ, FVector{1.0, 0.0, 0.0});
     aim_trace::Result hit;
-    if (report.Gate.InGameplay) {
+    if (report.Gate.InGameplay && (PoseApplies(report.State.verdict) || dev_console::Enabled())) {
         hit = aim_trace::Cast(rig.Pawn, rig.Weapon, aimOrigin, aimDir, kMaxTraceCm);
         report.TraceValid = hit.Valid;
         report.TraceHit = hit.Hit;

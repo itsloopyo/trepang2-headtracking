@@ -1049,6 +1049,8 @@ void SetEnabled(bool enabled, const std::string& exeDir) {
     if (g_enabled) Log::Line("dev: command channel enabled, polling %s", g_path.c_str());
 }
 
+bool Enabled() { return g_enabled; }
+
 void ArmFrontEndPolling() {
     if (!g_enabled) return;
     process_event_hook::Install();

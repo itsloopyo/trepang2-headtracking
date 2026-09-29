@@ -98,16 +98,20 @@ bool AskFlag(const ue_call::Function& fn, std::uintptr_t self, std::size_t index
 }
 
 // The authority game mode, when it is one of the game's own (the front end and
-// every level run a BaseGameMode_C subclass). Cached per object, because the
-// class walk is a string compare per link and this runs every frame.
+// every level run a BaseGameMode_C subclass). Cached per object and class,
+// because the class walk is a string compare per link and this runs every frame,
+// and the next level's game mode can be allocated where the last one was.
 std::uintptr_t GameMode(std::uintptr_t controller) {
     const std::uintptr_t world = ue::OuterObject(ue::OuterObject(controller));
     std::uintptr_t gameMode = 0;
     if (!world || !ue::SafeReadPtr(world + g_worldGameModeOffset, gameMode) || !gameMode) return 0;
+    const std::uintptr_t cls = ue_call::ClassOf(gameMode);
     static std::uintptr_t s_checked = 0;
+    static std::uintptr_t s_checkedClass = 0;
     static bool s_ours = false;
-    if (gameMode != s_checked) {
+    if (gameMode != s_checked || cls != s_checkedClass) {
         s_checked = gameMode;
+        s_checkedClass = cls;
         s_ours = ue_call::IsA(gameMode, "BaseGameMode_C");
         if (!s_ours)
             Log::Line("gate: game mode %s is not a BaseGameMode_C - treated as not gameplay",
