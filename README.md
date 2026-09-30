@@ -16,7 +16,7 @@ An unofficial head tracking mod for Trepang2 that moves the view with your head 
 - A head tracking source that can send the OpenTrack UDP protocol: [OpenTrack](https://github.com/opentrack/opentrack) with a webcam or a VR headset, or a phone app that sends it directly.
 - Windows 10 or 11, 64-bit.
 
-The mod recognises the game builds it was made for by their executable: the Steam build (menu footer `BUILD#: 2484`, Jul 30 2024), the GOG build of Aug 5 2024 and the Xbox Game Pass package version 1.0.15.0. On a build it does not know, it writes a line to `HeadTracking.log` and stays dormant, and the game runs exactly as it ships.
+Startup discovers and validates the camera addresses and engine layout. A game update can work without a new mod build when those checks pass. If discovery cannot establish a safe layout and no exact historical profile applies, head tracking stays off and `HeadTracking.log` names the failed check. Historical profiles cover Steam build 2484, the GOG build of August 5, 2024, and Xbox Game Pass package 1.0.15.0.
 
 ## Installation
 
@@ -246,17 +246,17 @@ Nothing else about the torch changes: only which way it points is the mod's, and
 
 ### Window placement
 
-A windowed game is moved once to the centre of the desktop work area on the monitor it opened on, after its window has stopped moving. That is the screen minus the taskbar, so the picture sits a little above the middle of the glass. A fullscreen or borderless window is left where it is, and so is one the game already put there - which is where an ordinary windowed launch lands, so most launches are not moved at all. Nothing is moved on a game build the mod has no profile for. The `window:` line in the log says which of those happened.
+A windowed game is moved once to the centre of the desktop work area on the monitor it opened on, after its window has stopped moving. That is the screen minus the taskbar, so the picture sits a little above the middle of the glass. A fullscreen or borderless window is left where it is, and so is one the game already put there - which is where an ordinary windowed launch lands, so most launches are not moved at all. Nothing is moved when startup cannot resolve the game addresses. The `window:` line in the log says which of those happened.
 
 ## Troubleshooting
 
-`HeadTracking.log`, beside the game exe, records the build the mod matched, whether the hook installed, the tracker link, and every change in whether head tracking is allowed and why. Read it first.
+`HeadTracking.log`, beside the game exe, records the build fingerprint, address discovery, whether the hook installed, the tracker link, and every change in whether head tracking is allowed and why. Read it first.
 
 **Mod not loading:**
 
 - Check that `winmm.dll` and `Trepang2HeadTracking.asi` are both beside the shipping exe (see Manual Installation for the folder on each store). A copy in the game's root folder is never loaded.
 - No `HeadTracking.log` at all means the loader never ran; run `install.cmd` again and let it resolve the path itself.
-- On a game build this release does not know, the log says so and the mod stays dormant on purpose rather than hooking against addresses that have moved.
+- A `discovery:` failure names an address or layout check that did not pass. Attach the log when reporting head tracking that stays off after a game update.
 
 **No tracking response:**
 

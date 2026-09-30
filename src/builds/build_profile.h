@@ -10,9 +10,7 @@
 
 #include "inject_mode.h"
 
-// One shipped build of Trepang2: the PE fingerprint that identifies it and
-// every per-build RVA and field offset the mod reads. No matching profile leaves
-// the mod dormant. Append a profile for a new build; never edit an existing one.
+// Historical measurements and runtime-discovered addresses share this layout.
 
 namespace t2_ht
 {

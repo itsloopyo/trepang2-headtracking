@@ -2,124 +2,77 @@
 // Copyright (c) 2026 itsloopyo
 
 #include "build_registry.h"
-
-#include <array>
-#include <cstring>
-#include <filesystem>
-#include <string>
-
-#include <cameraunlock/memory/pe_fingerprint.h>
-#include <cameraunlock/os/module_paths.h>
-
+#include "runtime_discovery.h"
 #include "logging.h"
 
-namespace t2_ht::builds
-{
-    // One extern per known build. Never-delete policy: when a game patch breaks
-    // the current build, derive new RVAs and ADD a new profile here (newest at
-    // the top of kKnownProfiles) without removing the old one. Users on the
-    // un-patched build still match their old profile by PE fingerprint.
-    extern const BuildProfile kGdkProfile_20260318;
-    extern const BuildProfile kGogProfile_20240805;
-    extern const BuildProfile kSteamProfile_20240730;
+#include <vector>
 
-    namespace
-    {
-        // Newest-first. The newest profile of the running exe's own store is
-        // the one an unmatched exe is read against: Trepang2's TimeDateStamp is
-        // a real build date, so above or below it says whether the game or the
-        // mod is the one that is behind. Comparing a Steam exe with the Game
-        // Pass build (or the other way round) would say nothing, which is why
-        // the reference is chosen per store.
-        constexpr std::array<const BuildProfile*, 3> kKnownProfiles = {
-            &kGdkProfile_20260318,
-            &kGogProfile_20240805,
-            &kSteamProfile_20240730,
-        };
+namespace t2_ht::builds {
+extern const BuildProfile kGdkProfile_20260318;
+extern const BuildProfile kGogProfile_20240805;
+extern const BuildProfile kSteamProfile_20240730;
+namespace {
+const BuildProfile* g_active = nullptr;
+BuildProfile g_discovered{};
+std::uint32_t g_viewSlot = 0;
+}
 
-        const BuildProfile* g_active = nullptr;
-
-        // A profile is "complete" iff its hook target RVA is non-zero. Lets a
-        // profile with the correct fingerprint but RVAs still TBD register
-        // without risking activation against stale/zero addresses.
-        bool ProfileIsComplete(const BuildProfile* p)
-        {
-            return p && p->Offsets.kGetPlayerViewPointRva != 0;
-        }
-
-        // Profile names start with their store: "steam-win64-...",
-        // "gog-win64-..." or "gdk-wingdk-...". The Game Pass build ships
-        // CPPFPS-WinGDK-Shipping.exe; Steam and GOG both ship
-        // CPPFPS-Win64-Shipping.exe, and GOG's installer leaves
-        // goggame-1599916752.info in the game root, three folders above it.
-        const char* RunningStorePrefix()
-        {
-            const std::wstring exe = cameraunlock::os::ModuleFilePath(nullptr);
-            if (exe.find(L"WinGDK") != std::wstring::npos) return "gdk-";
-            const std::filesystem::path root =
-                std::filesystem::path(exe).parent_path().parent_path().parent_path().parent_path();
-            const DWORD attrs = GetFileAttributesW((root / L"goggame-1599916752.info").c_str());
-            return attrs != INVALID_FILE_ATTRIBUTES ? "gog-" : "steam-";
-        }
-
-        const BuildProfile* NewestForStore(const char* prefix)
-        {
-            for (const BuildProfile* p : kKnownProfiles)
-                if (std::strncmp(p->Name, prefix, std::strlen(prefix)) == 0) return p;
-            return kKnownProfiles.front();
+MatchResult SelectProfile(HMODULE host) {
+    g_active = nullptr;
+    g_viewSlot = 0;
+    PeFingerprint running{};
+    if (!cameraunlock::memory::ReadPeFingerprint(host, running)) {
+        Log::Line("build-check: failed to read PE header from host module");
+        return MatchResult::ReadFailed;
+    }
+    Log::Line("build-check: running ts=0x%08x size=0x%08x csum=0x%08x",
+              running.TimeDateStamp, running.SizeOfImage, running.CheckSum);
+    const BuildProfile* known = nullptr;
+    for (const auto* profile : {&kGdkProfile_20260318, &kGogProfile_20240805, &kSteamProfile_20240730}) {
+        if (running.Matches(profile->Fingerprint)) { known = profile; break; }
+    }
+    std::vector<std::uint8_t> image(running.SizeOfImage);
+    SIZE_T copied = 0;
+    if (!ReadProcessMemory(GetCurrentProcess(), host, image.data(), image.size(), &copied) ||
+        copied != image.size()) {
+        Log::Line("discovery: could not snapshot the executable: Win32 error %lu", GetLastError());
+        return MatchResult::DiscoveryFailed;
+    }
+    std::string reason;
+    g_discovered = {"runtime-discovered", running, {}};
+    if (!DiscoverOffsets({image.data(), image.size(), reinterpret_cast<std::uintptr_t>(host)},
+                         g_discovered.Offsets, reason, g_viewSlot)) {
+        Log::Line("discovery: %s", reason.c_str());
+        if (!known) return MatchResult::DiscoveryFailed;
+        g_active = known;
+        g_viewSlot = 0;
+        Log::Line("build-check: using exact historical profile %s", known->Name);
+        return MatchResult::Matched;
+    }
+    const auto& found = g_discovered.Offsets;
+    if (known) {
+        const auto& expected = known->Offsets;
+        if (found.kGetPlayerViewPointRva != expected.kGetPlayerViewPointRva ||
+            found.kKnownCallerRvas[0] != expected.kKnownCallerRvas[0] ||
+            found.kProcessEventRva != expected.kProcessEventRva ||
+            found.UObjectGlobals.kObjObjects != expected.UObjectGlobals.kObjObjects ||
+            found.UObjectGlobals.kFNamePool != expected.UObjectGlobals.kFNamePool) {
+            Log::Line("discovery: resolved addresses disagree with exact historical profile %s", known->Name);
+            return MatchResult::DiscoveryFailed;
         }
     }
+    g_active = &g_discovered;
+    Log::Line("discovery: view=0x%08llx render=0x%08llx event=0x%08llx objects=0x%08llx "
+              "names=0x%08llx slot=0x%x; awaiting live layout validation",
+              static_cast<unsigned long long>(found.kGetPlayerViewPointRva),
+              static_cast<unsigned long long>(found.kKnownCallerRvas[0]),
+              static_cast<unsigned long long>(found.kProcessEventRva),
+              static_cast<unsigned long long>(found.UObjectGlobals.kObjObjects),
+              static_cast<unsigned long long>(found.UObjectGlobals.kFNamePool), g_viewSlot);
+    return MatchResult::Matched;
+}
 
-    MatchResult SelectProfile(HMODULE host)
-    {
-        PeFingerprint running{};
-        if (!cameraunlock::memory::ReadPeFingerprint(host, running)) {
-            Log::Line("build-check: failed to read PE header from host module");
-            return MatchResult::ReadFailed;
-        }
-
-        Log::Line("build-check: running  ts=0x%08x size=0x%08x csum=0x%08x",
-            running.TimeDateStamp, running.SizeOfImage, running.CheckSum);
-
-        // Only the profile that claims this exe is written to the log. The
-        // registry is append-only and grows for the life of the mod, so a line
-        // per known build would put the one fact a triage needs behind a list
-        // of builds the player is not running.
-        for (const BuildProfile* p : kKnownProfiles) {
-            if (!running.Matches(p->Fingerprint)) continue;
-            if (!ProfileIsComplete(p)) {
-                Log::Line("build-check: fingerprint matches %s but its offsets "
-                          "are not yet derived - staying dormant", p->Name);
-                return MatchResult::HostDiffers;
-            }
-            g_active = p;
-            Log::Line("build-check: matched profile %s", p->Name);
-            return MatchResult::Matched;
-        }
-
-        const BuildProfile* primary = NewestForStore(RunningStorePrefix());
-        Log::Line("build-check: no profile claims this exe (%zu known); newest for this "
-                  "store is %s ts=0x%08x size=0x%08x csum=0x%08x",
-            kKnownProfiles.size(), primary->Name, primary->Fingerprint.TimeDateStamp,
-            primary->Fingerprint.SizeOfImage, primary->Fingerprint.CheckSum);
-
-        switch (cameraunlock::memory::ClassifyMismatch(running, primary->Fingerprint)) {
-            case cameraunlock::memory::FingerprintMismatch::Differs:
-                Log::Line("build-check: the exe carries a known build's timestamp with a "
-                          "different size or checksum, so it has been repacked or "
-                          "modified - this mod does not engage on a modified binary");
-                return MatchResult::HostDiffers;
-            case cameraunlock::memory::FingerprintMismatch::Newer:
-                Log::Line("build-check: the game is newer than any build this mod knows "
-                          "about - check the releases page for an updated mod");
-                return MatchResult::HostUnknown;
-            case cameraunlock::memory::FingerprintMismatch::Older:
-                Log::Line("build-check: the game is older than the build this mod was made "
-                          "for - let the store finish updating the game");
-                return MatchResult::HostUnknown;
-        }
-        return MatchResult::HostUnknown;
-    }
-
-    const BuildProfile& ActiveProfile() { return *g_active; }
+const BuildProfile& ActiveProfile() { return *g_active; }
+bool UsesRuntimeDiscovery() { return g_active == &g_discovered; }
+std::uint32_t RuntimeViewSlot() { return g_viewSlot; }
 }

@@ -44,6 +44,7 @@
 #include "udp_link.h"
 #include "ue4_types.h"
 #include "ue_call.h"
+#include "ue_reflect.h"
 #include "ue_vm.h"
 #include "window_centering.h"
 
@@ -568,11 +569,73 @@ void ApplyFrame(std::uintptr_t controller, std::uintptr_t retRva, ue4::FVector* 
     LogHeartbeat(report, retRva);
 }
 
+bool DiscoveryReady(std::uintptr_t controller) {
+    if (!builds::UsesRuntimeDiscovery()) return true;
+    std::uintptr_t table = 0, target = 0;
+    if (!ue::SafeReadPtr(controller, table) ||
+        !ue::SafeReadPtr(table + builds::RuntimeViewSlot(), target) ||
+        target != ue::ModuleBase() + Offsets().kGetPlayerViewPointRva) return false;
+
+    static bool ready = false;
+    static std::uint64_t lastAttempt = 0;
+    static std::uint64_t lastReport = 0;
+    if (ready) return true;
+    const auto now = GetTickCount64();
+    if (now - lastAttempt < 1000) return false;
+    lastAttempt = now;
+    const auto waiting = [&](const char* detail) {
+        if (now - lastReport >= 5000) {
+            lastReport = now;
+            Log::Line("discovery: waiting for live layout validation: %s", detail);
+        }
+        return false;
+    };
+    std::uintptr_t view = 0;
+    unsigned matches = 0;
+    ue::ForEachUObject([&](std::uintptr_t object) {
+        if (ue::ObjectName(object) == "MinimalViewInfo" &&
+            ue::ClassName(object) == "ScriptStruct" && ue::OuterName(object) == "/Script/Engine") {
+            view = object;
+            ++matches;
+        }
+        return false;
+    });
+    if (matches != 1) return waiting("MinimalViewInfo is absent or ambiguous");
+    struct Expected { const char* name; std::size_t offset, size; const char* type; };
+    const Expected expected[] = {
+        {"Location", 0, 12, "StructProperty"}, {"Rotation", 12, 12, "StructProperty"},
+        {"FOV", 24, 4, "FloatProperty"}, {"AspectRatio", 44, 4, "FloatProperty"},
+    };
+    const auto size = ue_reflect::StructSize(view);
+    if (size == 0 || size > 0x10000) return waiting("MinimalViewInfo size is invalid");
+    for (const auto& want : expected) {
+        ue_reflect::FieldInfo field;
+        if (!ue_reflect::FindProperty(view, want.name, field) || field.Offset != want.offset ||
+            field.Size != want.size || field.TypeName != want.type ||
+            !ue_reflect::FieldFits(field, want.size, size)) return waiting(want.name);
+        std::uint32_t arrayDim = 0;
+        if (!ue::SafeReadU32(field.Field + Offsets().Reflection.kFProperty_ArrayDim, arrayDim) ||
+            arrayDim != 1) return waiting("unexpected property array dimension");
+        if (field.TypeName == "StructProperty") {
+            std::uintptr_t structure = 0;
+            if (!ue::SafeReadPtr(field.Field + Offsets().Reflection.kFStructProperty_Struct, structure) ||
+                ue::ObjectName(structure) != (field.Name == "Location" ? "Vector" : "Rotator") ||
+                ue_reflect::StructSize(structure) != want.size) return waiting("vector/rotator struct layout");
+        }
+    }
+    if (!ue_reflect::VerifyBoolLayout(ue_call::ClassOf(controller))) return false;
+    ready = true;
+    Log::Line("discovery: live controller dispatch, MinimalViewInfo offsets and widths, "
+              "and controller bool layout validated");
+    return true;
+}
+
 void __fastcall GetPlayerViewPoint_Hook(void* self, ue4::FVector* outLocation, ue4::FRotator* outRotation) {
     const std::uintptr_t retRva = ReturnRva(_ReturnAddress());
     const auto controller = reinterpret_cast<std::uintptr_t>(self);
 
     g_origGetPlayerViewPoint(self, outLocation, outRotation);
+    if (!DiscoveryReady(controller)) return;
 
     const auto call = g_hookCallCount.fetch_add(1, std::memory_order_relaxed) + 1;
     const int mode = g_injectMode.load(std::memory_order_relaxed);

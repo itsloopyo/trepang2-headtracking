@@ -58,6 +58,7 @@ set(MOD_SOURCES
     src/legacy_config/legacy_config.cpp
     src/crash_report.cpp
     src/builds/build_registry.cpp
+    src/builds/runtime_discovery.cpp
     src/builds/steam_offsets.cpp
     src/builds/gdk_offsets.cpp
     src/builds/gog_offsets.cpp
@@ -102,6 +103,13 @@ set_target_properties(Trepang2HeadTracking PROPERTIES
 option(T2_BUILD_TESTS "Build the behaviour tests" ON)
 if(T2_BUILD_TESTS)
     enable_testing()
+    add_executable(trepang2_runtime_discovery_tests
+        tests/runtime_discovery_tests.cpp src/builds/runtime_discovery.cpp
+        src/builds/build_registry.cpp src/builds/gdk_offsets.cpp src/builds/gog_offsets.cpp src/builds/steam_offsets.cpp
+    )
+    target_include_directories(trepang2_runtime_discovery_tests PRIVATE src tests cameraunlock-core/cpp/include)
+    target_link_libraries(trepang2_runtime_discovery_tests PRIVATE cameraunlock)
+    add_test(NAME trepang2_runtime_discovery_tests COMMAND trepang2_runtime_discovery_tests)
 
     # The aim-down-sights layer: the verdict walk, and the lean the sights ease
     # out. Both run with no game and no graphics device.
@@ -216,6 +224,7 @@ if(T2_BUILD_TESTS)
         src/kismet_trace.cpp
         src/ue_reflect.cpp
         src/builds/build_registry.cpp
+        src/builds/runtime_discovery.cpp
         src/builds/steam_offsets.cpp
         src/builds/gdk_offsets.cpp
         src/builds/gog_offsets.cpp
@@ -299,6 +308,7 @@ if(T2_BUILD_TESTS)
         src/ue_reflect.cpp
         src/ue_vm.cpp
         src/builds/build_registry.cpp
+        src/builds/runtime_discovery.cpp
         src/builds/steam_offsets.cpp
         src/builds/gdk_offsets.cpp
         src/builds/gog_offsets.cpp

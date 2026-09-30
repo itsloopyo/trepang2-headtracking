@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+
+- Camera addresses are discovered at startup, allowing game updates with a compatible layout to work without a new mod build. Tracking waits for engine layout validation before applying a pose.
 - The tracking mode (`PageUp` / `Ctrl+Shift+J`) and the yaw mode (`PageDown`) are saved to `CameraUnlock.ini` the moment you change them, and the game starts in them next time. `End` still turns head tracking on or off for the current session only; the new `[General] EnableOnStartup` (default `true`) says whether it is on when the game starts.
 - A setting set to `default` in `CameraUnlock.ini` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
 - `Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
