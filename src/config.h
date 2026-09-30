@@ -44,7 +44,6 @@ struct Config {
     // Point the torch where the head is looking rather than where the weapon is
     // aiming, and how far it leads the view. 1.0 matches the view, 0 pins the
     // beam to the aim.
-    bool light_follows_head = true;
     float light_multiplier = cameraunlock::effects::kDefaultLightMultiplier;
 
     std::string toggle_key =

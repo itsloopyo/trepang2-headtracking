@@ -18,7 +18,8 @@
 // the file is read. Each one is listed below with its commit.
 //
 // Comparison 2, import against migration, is the proof for the conversion. It
-// allows no difference: the file carried no pose shaping and no reticle setting,
+// allows only the retired LightFollowsHead switch to differ (core 06e575a).
+// The file carried no pose shaping and no reticle setting,
 // the reader lets through no value that is not finite, the yaw key it keeps is
 // inside 0x01-0xFE and never a Ctrl, Shift or Alt key alone (so N1 and N3 never
 // apply), the mode and yaw keys keep the lists the build bound (this game's
@@ -494,7 +495,7 @@ Observed ObserveCanonical(const t2_ht::Config& c) {
     o.collision_channel = c.collision_channel;
     o.aim_trace_channel = c.aim_trace_channel;
     o.collision_release_smoothing = c.collision_release_smoothing;
-    o.light_follows_head = c.light_follows_head;
+    o.light_follows_head = true;
     o.light_multiplier = c.light_multiplier;
     o.dev_commands = c.dev_commands;
     // mod_hotkeys.cpp Register: each list through ParseKeyBindings and
@@ -576,7 +577,7 @@ const char* const kSkewedDefaults =
     "[Smoothing]\r\nLocalSmoothing=0.5\r\nRemoteSmoothing=0.5\r\n\r\n"
     "[Position]\r\nPositionEnabled=true\r\nCollisionEnabled=false\r\nCollisionReleaseSmoothing=0.25\r\n\r\n"
     "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\n\r\n"
-    "[Light]\r\nLightFollowsHead=false\r\nLightMultiplier=3.5\r\n";
+    "[Light]\r\nLightMultiplier=3.5\r\n";
 
 // What the session runs on under kSkewedDefaults with no legacy setting at all.
 Observed SkewedDefaults() {
@@ -589,7 +590,7 @@ Observed SkewedDefaults() {
     o.remote_smoothing = 0.5f;
     o.collision_enabled = false;
     o.collision_release_smoothing = 0.25f;
-    o.light_follows_head = false;
+    o.light_follows_head = true;
     o.light_multiplier = 3.5f;
     // F8. The mode and yaw rows are this game's own and never read Defaults.ini.
     o.hotkeys = {{kToggle, 0x77, kPlain}};
@@ -618,7 +619,6 @@ std::vector<GlobalRow> GlobalRows(const t2_ht::legacy::Config& read) {
         {"CollisionReleaseSmoothing",
          Bits(read.collision_release_smoothing) != Bits(shipped.collision_release_smoothing)},
         {"ToggleKey", false},
-        {"LightFollowsHead", read.light_follows_head != shipped.light_follows_head},
         {"LightMultiplier", Bits(read.light_multiplier) != Bits(shipped.light_multiplier)},
     };
 }
@@ -644,7 +644,6 @@ Observed OverDefaults(const Observed& imported, const std::vector<GlobalRow>& ro
     if (!Changed(rows, "CollisionReleaseSmoothing")) {
         o.collision_release_smoothing = defaults.collision_release_smoothing;
     }
-    if (!Changed(rows, "LightFollowsHead")) o.light_follows_head = defaults.light_follows_head;
     if (!Changed(rows, "LightMultiplier")) o.light_multiplier = defaults.light_multiplier;
     if (!Changed(rows, "ToggleKey")) {
         o.hotkeys.erase(std::remove_if(o.hotkeys.begin(), o.hotkeys.end(),
@@ -743,7 +742,9 @@ void ImportAgainstMigration(const std::vector<Input>& inputs) {
                   "the import reads every input, as the published build did");
         CHECK_MSG(imported.dropped.empty() && imported.pose_shaping.empty(),
                   "comparison 2: the import drops nothing and reads no pose shaping");
-        const Observed want = ObserveLegacy(read);
+        Observed want = ObserveLegacy(read);
+        // Core retired the switch; LightMultiplier alone controls the beam.
+        want.light_follows_head = true;
         const std::vector<GlobalRow> rows = GlobalRows(read);
 
         // Over a Defaults.ini the owner creates with the built-in values.

@@ -148,7 +148,6 @@ The built-in value of each setting set to `default` below:
 - `CollisionEnabled=true`
 - `CollisionReleaseSmoothing=0.9`
 - `ToggleKey=End, Ctrl+Shift+Y`
-- `LightFollowsHead=true`
 - `LightMultiplier=1.5`
 
 With every setting at its default, the file reads:
@@ -161,8 +160,9 @@ With every setting at its default, the file reads:
 ; that keeps its settings in CameraUnlock.ini reads: %AppData%\CameraUnlock\Defaults.ini on
 ; Windows, $XDG_CONFIG_HOME/CameraUnlock/Defaults.ini (normally ~/.config/CameraUnlock) on
 ; Linux, under Wine and Proton too, and ~/Library/Application Support/CameraUnlock/Defaults.ini
-; on macOS. The log names the file it read. Write a value instead of default to change that
-; setting for this game only.
+; on macOS. The log names the file it read. Change a setting in Defaults.ini to change it in
+; every game that has it set to default, or write a value here instead of default to change it
+; for this game only.
 
 [CameraUnlock]
 ; Written by the mod. Leave this section in place.
@@ -193,6 +193,7 @@ RemoteSmoothing=default
 ; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
 PositionEnabled=default
 ; true: leaning stops at walls instead of moving the view through them.
+; Only games whose mod sweeps the level for walls read this; the rest ignore it.
 CollisionEnabled=default
 ; How far the view is held off a wall when you lean into it, in centimetres.
 ; Keep it above 3, the game's near clip distance.
@@ -212,8 +213,6 @@ CycleTrackingModeKey=PageUp, Ctrl+Shift+J
 YawModeKey=PageDown
 
 [Light]
-; true: a light you carry points where you look instead of where you aim.
-LightFollowsHead=default
 ; How far the light turns for each degree your head turns.
 ; 1 matches the view, 0 keeps the light on your aim.
 LightMultiplier=default
@@ -238,7 +237,7 @@ Head tracking moves the picture by the same amount whatever field of view the ga
 
 ### The torch
 
-The torch points along your aim, so without the mod head tracking turns the view away from the beam and leaves the light behind. `LightFollowsHead` takes it off the aim and turns it with your head instead.
+The torch points along your aim, so without the mod head tracking turns the view away from the beam and leaves the light behind. The mod turns the torch with your head.
 
 It turns further than the view does - `LightMultiplier` times as far, 1.5 by default. When you turn your head you keep your eyes on the thing you turned towards, so what you are actually looking at sits past the middle of the screen, and a beam that only matched the view would land short of it. Set it to `1.0` to have the beam sit where the view is pointed, or to `0` to leave the torch on the aim, which is what the game does unmodded. A value outside 0 to 5 is refused with a line in the log and the default stands.
 

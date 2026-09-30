@@ -22,7 +22,6 @@ namespace {
 namespace ue = ::cameraunlock::unreal;
 namespace effects = ::cameraunlock::effects;
 
-bool  g_followsHead = false;
 float g_multiplier = effects::kDefaultLightMultiplier;
 
 ue_vm::ResolveRetry g_retry;
@@ -100,7 +99,7 @@ void ResolveTorch(const player_rig::Snapshot& rig) {
 
 // True when there is a torch to write to this frame.
 bool Ready(const player_rig::Snapshot& rig) {
-    if (!g_followsHead || !rig.Pawn) return false;
+    if (!rig.Pawn) return false;
     if (!g_haveSetter) {
         if (!g_retry.Due() || !ue_vm::Ready()) return false;
         g_haveSetter = g_setRelativeRotation.Resolve(
@@ -134,20 +133,14 @@ void Write(const ue::FRotator& relative) {
 
 }  // namespace
 
-void Configure(bool followsHead, float multiplier) {
-    g_followsHead = followsHead;
+void Configure(float multiplier) {
     g_multiplier = multiplier;
-    g_state = followsHead ? "unresolved" : "off";
-    if (!followsHead) {
-        Log::Line("torch: LightFollowsHead is off - the beam stays on the weapon's aim");
-        return;
-    }
+    g_state = "unresolved";
     Log::Line("torch: the beam will follow the head at %.2fx", multiplier);
 }
 
 void Apply(const player_rig::Snapshot& rig, double yaw, double pitch, double roll,
            bool worldSpaceYaw) {
-    if (!g_followsHead) return;
     // An unreadable parent transform leaves the beam where it is: composing
     // onto a rotation that did not read would point it anywhere.
     if (Ready(rig) && rig.FirstPersonCamera.Valid) {
@@ -157,11 +150,10 @@ void Apply(const player_rig::Snapshot& rig, double yaw, double pitch, double rol
         if (!g_turned || Differs(relative, g_written)) Write(relative);
         g_turned = g_torch != 0;
     }
-    g_state = g_turned ? "following" : "unresolved";
+    g_state = g_turned ? (g_multiplier == 0.0f ? "aim" : "following") : "unresolved";
 }
 
 void Center(const player_rig::Snapshot& rig) {
-    if (!g_followsHead) return;
     if (Ready(rig) && g_turned) {
         Write(ue::FRotator{0.0, 0.0, 0.0});
         g_turned = false;

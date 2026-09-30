@@ -59,7 +59,7 @@ inline cameraunlock::unreal::FRotator BeamRelative(const cameraunlock::unreal::F
 }
 
 // Read the config once, before the first frame.
-void Configure(bool followsHead, float multiplier);
+void Configure(float multiplier);
 
 // Game thread, once per rendered frame, with the pose the camera was given.
 void Apply(const player_rig::Snapshot& rig, double yaw, double pitch, double roll,

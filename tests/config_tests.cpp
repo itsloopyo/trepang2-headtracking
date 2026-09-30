@@ -132,7 +132,7 @@ void TheCommittedFileFollowsDefaultsIni() {
          {"UdpPort=default", "EnableOnStartup=default", "WorldSpaceYaw=default", "RotationEnabled=default",
           "PositionEnabled=default", "LocalSmoothing=default", "RemoteSmoothing=default", "CollisionEnabled=default",
           "CollisionReleaseSmoothing=default", "ToggleKey=default",
-          "CycleTrackingModeKey=PageUp, Ctrl+Shift+J", "YawModeKey=PageDown", "LightFollowsHead=default", "LightMultiplier=default",
+          "CycleTrackingModeKey=PageUp, Ctrl+Shift+J", "YawModeKey=PageDown", "LightMultiplier=default",
           "CollisionMargin=10.0", "; CollisionChannel=0", "; AimTraceChannel=0", "DevCommands=false"}) {
         CHECK_MSG(Holds(committed, line), line);
     }
@@ -293,6 +293,29 @@ void AnOldYawKeyOnEndStaysUnbound() {
     CHECK(Holds(ReadFileBytes(s.ini()), "YawModeKey="));
 }
 
+void TheRetiredLightSwitchIsIgnored() {
+    Scratch s("retired_light");
+    const std::string legacy = "[Light]\r\nLightFollowsHead=false\r\nLightMultiplier=2.25\r\n";
+    WriteFileBytes(s.legacy(), legacy);
+    CHECK(s.Load().light_multiplier == 2.25f);
+    CHECK(ReadFileBytes(s.legacy()) == legacy);
+    CHECK(ReadFileBytes(s.ini()).find("LightFollowsHead") == std::string::npos);
+
+    const std::string canonical =
+        "[CameraUnlock]\r\nConfigFormat=1\r\n[Light]\r\nLightFollowsHead=false\r\nLightMultiplier=0\r\n";
+    WriteFileBytes(s.ini(), canonical);
+    const auto loaded = cfg::ConfigOwner<t2_ht::Config>(t2_ht::config::OwnerOptions(
+        s.game().wstring(), cfg::DefaultsFile::At(s.defaults().wstring()))).Load();
+    CHECK(loaded.config.light_multiplier == 0.0f);
+    CHECK(ReadFileBytes(s.ini()) == canonical);
+    bool warned = false;
+    for (const auto& line : loaded.log) {
+        if (line.find("LightFollowsHead") != std::string::npos &&
+            line.find("ignored") != std::string::npos) warned = true;
+    }
+    CHECK_MSG(warned, "the retired key diagnostic reports that the switch is ignored");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -313,6 +336,7 @@ int main(int argc, char** argv) {
     AnOldYawKeyOnCtrlStaysPageDown();
     AnUntouchedSettingFollowsDefaultsIni();
     AnOldYawKeyOnEndStaysUnbound();
+    TheRetiredLightSwitchIsIgnored();
 
     return t2_test::Report();
 }

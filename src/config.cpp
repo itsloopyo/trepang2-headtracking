@@ -17,6 +17,7 @@
 #include "legacy_config/legacy_config.h"
 #include "logging.h"
 
+#include "cameraunlock/config/config_key_schema.g.h"
 #include "cameraunlock/config/hotkey_codec.h"
 #include "cameraunlock/config/value_codecs.h"
 
@@ -103,8 +104,10 @@ cfg::ImportResult RunImport(const cfg::LegacyInput& input, Config& out) {
     follows.Setting(Concept::CollisionReleaseSmoothing, read.collision_release_smoothing,
                     shipped.collision_release_smoothing);
     out.aim_trace_channel = read.aim_trace_channel;
-    out.light_follows_head = read.light_follows_head;
-    follows.Setting(Concept::LightFollowsHead, read.light_follows_head, shipped.light_follows_head);
+    if (!read.light_follows_head) {
+        Log::Line("config: [Light] LightFollowsHead is retired and ignored. "
+                  "Set LightMultiplier=0 to keep the beam on the weapon's aim.");
+    }
     out.light_multiplier = read.light_multiplier;
     follows.Setting(Concept::LightMultiplier, read.light_multiplier, shipped.light_multiplier);
     out.dev_commands = read.dev_commands;
@@ -154,7 +157,6 @@ cfg::ConfigTable<Config> Table() {
         .PerGame()
         .Concept<Concept::YawModeKey>(&Config::yaw_mode_key)
         .PerGame()
-        .Concept<Concept::LightFollowsHead>(&Config::light_follows_head)
         .Concept<Concept::LightMultiplier>(&Config::light_multiplier)
         .Local("Aim", "AimTraceChannel", &Config::aim_trace_channel, cfg::IntCodec<int>(),
                "Which of the game's collision channels the aim trace tests against, 0 to 31. The\n"
@@ -210,6 +212,12 @@ Config Load(const std::wstring& exe_dir, cfg::DefaultsFile defaults) {
     g_owner = std::make_unique<cfg::ConfigOwner<Config>>(OwnerOptions(exe_dir, std::move(defaults)));
     const cfg::ConfigLoadResult<Config> result = g_owner->Load();
     for (const std::string& line : result.log) Log::Line("config: %s", line.c_str());
+    for (const auto& diagnostic : result.diagnostics) {
+        if (diagnostic.kind == cfg::CanonicalDiagnosticKind::RetiredKey) {
+            Log::Line("config: %s", cameraunlock::RetiredConfigKeyAdvice(
+                cameraunlock::ResolveConfigKey(diagnostic.key)));
+        }
+    }
     if (!result.reason.empty()) Log::Line("config: %s", result.reason.c_str());
     Log::Line("config: %s", cfg::ConfigLoadStatusName(result.status));
     return result.config;

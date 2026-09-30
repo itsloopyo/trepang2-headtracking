@@ -692,7 +692,7 @@ bool Install(const Dependencies& deps) {
         Log::Line("config: [Position] CollisionChannel=%d is not a trace channel (0 to 31) - "
                   "the lean is not held off walls this session", channel);
     }
-    torch_aim::Configure(deps.config->light_follows_head, deps.config->light_multiplier);
+    torch_aim::Configure(deps.config->light_multiplier);
     cameraunlock::camera::LeanClampSettings clamp;
     clamp.skin = 0.0f;  // lean_trace carries the margin along the surface normal
     clamp.release_smoothing = deps.config->collision_release_smoothing;
