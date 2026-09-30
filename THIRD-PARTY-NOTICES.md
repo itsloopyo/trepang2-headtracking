@@ -305,3 +305,12 @@ repository. The reflected class, property and function names the mod looks up at
 runtime (for example `BasePlayer::FirstPersonCameraComponent`, `WBCrosshair_C`
 and `BaseGameMode_C::GetIsPlayingCutscene`) are the game's own identifiers, used
 only to find those objects in the running game.
+
+
+## Trepang2 footage
+
+- **File:** `assets/readme-clip.gif`.
+- **Attribution:** Trepang Studios and Team17; third-party marks belong to their respective rights holders.
+- **Purpose:** gameplay demonstrating this mod in the README.
+- **Distribution:** stored in this repository; excluded from the release ZIPs.
+- **Licence:** no licence over the footage is granted by this repository's MIT licence. It will be removed on request from a rights holder.
